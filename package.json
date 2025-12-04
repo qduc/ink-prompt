@@ -1,0 +1,40 @@
+{
+  "name": "ink-prompt",
+  "version": "1.0.0",
+  "description": "A React Ink component for prompts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "ink",
+    "react",
+    "prompt",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "ink": "^4.0.0 || ^5.0.0",
+    "react": "^16.8.0 || ^17.0.0 || ^18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^18.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
