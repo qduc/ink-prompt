@@ -1,5 +1,6 @@
 import React from 'react';
-import type { Buffer, Cursor, WrapResult } from './types';
+import { Text } from 'ink';
+import type { Buffer, Cursor, WrapResult } from './types.js';
 
 /**
  * Props for the TextRenderer component
@@ -108,7 +109,7 @@ export function TextRenderer({
 
         return (
           <div key={index}>
-            {displayLine}
+              <Text>{displayLine}</Text>
           </div>
         );
       })}

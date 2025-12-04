@@ -6,8 +6,8 @@ import {
   insertNewLine,
   moveCursor,
   getTextContent,
-} from '../TextBuffer';
-import type { Buffer, Cursor } from '../types';
+} from '../TextBuffer.js';
+import type { Buffer, Cursor } from '../types.js';
 
 describe('TextBuffer', () => {
   describe('createBuffer', () => {

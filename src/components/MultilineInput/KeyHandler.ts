@@ -1,5 +1,5 @@
-import { type Key, type Buffer, type Cursor, type Direction } from './types';
-import { type UseTextInputResult } from './useTextInput';
+import { type Key, type Buffer, type Cursor, type Direction } from './types.js';
+import { type UseTextInputResult } from './useTextInput.js';
 
 export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor'> {
   submit: () => void;

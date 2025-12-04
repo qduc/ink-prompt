@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleKey, KeyHandlerActions } from '../KeyHandler';
-import { Buffer, Key } from '../types';
+import { handleKey, KeyHandlerActions } from '../KeyHandler.js';
+import { Buffer, Key } from '../types.js';
 
 describe('KeyHandler', () => {
   let actions: KeyHandlerActions;

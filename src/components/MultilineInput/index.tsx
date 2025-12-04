@@ -1,8 +1,9 @@
 import React, { useEffect, useCallback } from 'react';
-import { useTextInput } from './useTextInput';
-import { handleKey, KeyHandlerActions } from './KeyHandler';
-import { TextRenderer } from './TextRenderer';
-import { createBuffer } from './TextBuffer';
+import { useInput, useStdout, Box, Text } from 'ink';
+import { useTextInput } from './useTextInput.js';
+import { handleKey, KeyHandlerActions } from './KeyHandler.js';
+import { TextRenderer } from './TextRenderer.js';
+import { createBuffer } from './TextBuffer.js';
 
 export interface MultilineInputProps {
   /** Controlled text value */
@@ -93,8 +94,6 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   width,
   isActive = true,
 }) => {
-  // Import Ink hooks dynamically to avoid import-time errors in tests
-  const { useInput, useStdout, Box, Text } = require('ink');
 
   // Get terminal width from Ink if not provided
   const { stdout } = useStdout();

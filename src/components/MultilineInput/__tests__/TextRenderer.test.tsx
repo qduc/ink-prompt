@@ -1,8 +1,8 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import { TextRenderer, wrapLines } from '../TextRenderer';
-import type { Buffer, Cursor } from '../types';
+import { TextRenderer, wrapLines } from '../TextRenderer.js';
+import type { Buffer, Cursor } from '../types.js';
 
 describe('wrapLines', () => {
   describe('no wrapping needed', () => {

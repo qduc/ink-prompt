@@ -6,8 +6,8 @@ import {
   insertNewLine as bufferInsertNewLine,
   moveCursor as bufferMoveCursor,
   getTextContent,
-} from './TextBuffer';
-import type { Buffer, Cursor, Direction } from './types';
+} from './TextBuffer.js';
+import type { Buffer, Cursor, Direction } from './types.js';
 
 export interface UseTextInputProps {
   initialValue?: string;

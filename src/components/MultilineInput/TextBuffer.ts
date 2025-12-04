@@ -1,4 +1,4 @@
-import type { Buffer, Cursor, Direction } from './types';
+import type { Buffer, Cursor, Direction } from './types.js';
 
 /**
  * Create a new buffer from optional initial text

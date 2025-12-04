@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { MultilineInputCore } from '../index';
+import { MultilineInputCore } from '../index.js';
 
 /**
  * Integration tests for MultilineInputCore.

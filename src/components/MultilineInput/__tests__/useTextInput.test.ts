@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { useTextInput } from '../useTextInput';
+import { useTextInput } from '../useTextInput.js';
 
 describe('useTextInput', () => {
   it('should initialize with empty buffer', () => {
