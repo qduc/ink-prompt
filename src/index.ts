@@ -1,3 +1,3 @@
 // Re-export all components and utilities
-export { Prompt } from './components/Prompt';
-export type { PromptProps } from './components/Prompt';
+export { MultilineInput } from './components/MultilineInput';
+export type { MultilineInputProps } from './components/MultilineInput';

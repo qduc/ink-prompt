@@ -1,10 +1,10 @@
 import React from 'react';
 
-export interface PromptProps {
+export interface MultilineInputProps {
   // Component props will be defined here
 }
 
-export const Prompt: React.FC<PromptProps> = (props) => {
+export const MultilineInput: React.FC<MultilineInputProps> = (props) => {
   // Component implementation
   return null;
 };

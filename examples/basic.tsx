@@ -1,10 +1,10 @@
 import React from 'react';
 import { render } from 'ink';
-import { Prompt } from '../src/index';
+import { MultilineInput } from '../src/index';
 
 const App = () => {
   return (
-    <Prompt
+    <MultilineInput
       // Add props here
     />
   );

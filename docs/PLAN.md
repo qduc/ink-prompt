@@ -1,3 +1,5 @@
+# MultilineInput Component Plan
+
 ## Core Problems to Solve
 
 ### 1. **State Management**
@@ -40,11 +42,13 @@
 
 **2. Feature scope:**
    - Do you need selection/copy-paste? No
-   - Undo/redo? Yes
+   - Undo/redo? Yes (simple history stack - save state on each edit, Ctrl+Z to undo, Ctrl+Y to redo)
 
 **3. Submit behavior:**
    - What key sends the input? (Ctrl+Enter? Ctrl+D? Just Enter?) Enter
-   - Can users have newlines in their input? Yes, by Ctrl + J or end with a '\'
+   - Can users have newlines in their input? Yes, by:
+     - Ctrl+J inserts a newline
+     - Line ending with `\` + Enter continues to next line (removes the `\` and inserts newline)
 
 **4. Integration:**
    - Is this a standalone component or part of a larger form? Standalone
