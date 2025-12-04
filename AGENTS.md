@@ -5,8 +5,6 @@ REMEMBER: This file must be kept up-to-date with every significant change to the
 
 `ink-prompt` is a React Ink component library for creating interactive CLI prompts. It provides reusable components that integrate with Ink's terminal rendering system to enable user input in CLI applications.
 
-The project is in early development with a skeleton structure in place. Currently exports a `MultilineInput` component (not yet implemented) designed for multi-line text input in terminal UIs.
-
 ## Development Philosophy
 
 This project follows **Test-Driven Development (TDD)**:

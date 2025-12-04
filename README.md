@@ -1,6 +1,8 @@
 # ink-prompt
 
-A React Ink component for prompts.
+A React Ink component library focused on terminal-friendly prompts. The first
+export is `MultilineInput`, an Ink component for collecting multi-line text in
+CLIs.
 
 ## Installation
 
@@ -12,20 +14,42 @@ npm install ink-prompt
 
 ```tsx
 import React from 'react';
-import { render } from 'ink';
-import { Prompt } from 'ink-prompt';
+import { render, Box, Text } from 'ink';
+import { MultilineInput } from 'ink-prompt';
 
 const App = () => {
   return (
-    <Prompt
-      message="What is your name?"
-      onSubmit={(answer) => console.log(answer)}
-    />
+    <Box flexDirection="column">
+      <Text>Describe your change (press Enter to submit):</Text>
+      <MultilineInput
+        onSubmit={(value) => console.log(value)}
+        width={80}
+      />
+    </Box>
   );
 };
 
 render(<App />);
 ```
+
+`MultilineInput` supports typical editing controls:
+
+- Arrow keys for navigation
+- `Ctrl+J` or typing `\` before Enter to add a newline
+- `Ctrl+Z`/`Ctrl+Y` for undo/redo
+- Enter submits the current buffer
+
+## Manual testing
+
+A runnable Ink playground lives in `examples/basic.tsx`. Build the library once
+and launch the example with:
+
+```bash
+npm run example
+```
+
+This renders the component in your terminal so you can try the editing and
+submission workflow manually. Press `Ctrl+C` to exit when you're done.
 
 ## Development
 

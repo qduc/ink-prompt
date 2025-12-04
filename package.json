@@ -4,27 +4,17 @@
   "description": "A React Ink component for prompts",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "tsc",
-    "build:examples": "tsc -p tsconfig.examples.json",
     "dev": "tsc --watch",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:ui": "vitest --ui",
-    "test:watch": "vitest",
-    "example": "tsx examples/basic.tsx",
-    "example:compiled": "npm run build:examples && node dist/examples/examples/basic.js"
+    "test:watch": "vitest"
   },
   "keywords": [
     "ink",
@@ -44,8 +34,8 @@
     "@types/react": "^18.0.0",
     "@vitest/ui": "^4.0.15",
     "happy-dom": "^20.0.11",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.0.0",
     "vitest": "^4.0.15"
   }
