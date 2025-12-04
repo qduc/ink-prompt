@@ -1,5 +1,4 @@
-import { type Key } from 'ink';
-import { type Buffer, type Cursor, type Direction } from './types';
+import { type Key, type Buffer, type Cursor, type Direction } from './types';
 import { type UseTextInputResult } from './useTextInput';
 
 export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor'> {

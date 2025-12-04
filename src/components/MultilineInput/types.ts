@@ -32,3 +32,28 @@ export interface WrapResult {
   /** Column in that visual row where cursor appears */
   cursorVisualCol: number;
 }
+
+/**
+ * Keyboard key state (mirrors Ink's Key interface)
+ * Defined locally to avoid ESM/CJS import issues with Ink
+ */
+export interface Key {
+  upArrow?: boolean;
+  downArrow?: boolean;
+  leftArrow?: boolean;
+  rightArrow?: boolean;
+  pageDown?: boolean;
+  pageUp?: boolean;
+  return?: boolean;
+  escape?: boolean;
+  ctrl?: boolean;
+  shift?: boolean;
+  tab?: boolean;
+  backspace?: boolean;
+  delete?: boolean;
+  meta?: boolean;
+  /** Home key (may not be available in all terminals) */
+  home?: boolean;
+  /** End key (may not be available in all terminals) */
+  end?: boolean;
+}
