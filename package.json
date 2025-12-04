@@ -16,12 +16,15 @@
   ],
   "scripts": {
     "build": "tsc",
+    "build:examples": "tsc -p tsconfig.examples.json",
     "dev": "tsc --watch",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:ui": "vitest --ui",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "example": "tsx examples/basic.tsx",
+    "example:compiled": "npm run build:examples && node dist/examples/examples/basic.js"
   },
   "keywords": [
     "ink",
