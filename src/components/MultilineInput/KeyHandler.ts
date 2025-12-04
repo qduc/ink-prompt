@@ -3,7 +3,6 @@ import { type UseTextInputResult } from './useTextInput.js';
 
 export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor'> {
   submit: () => void;
-  deleteForward: () => void;
 }
 
 /**
@@ -124,8 +123,8 @@ export function handleKey(
       // Let's assume "line ends with \" means the last char of the line is '\'.
 
       if (currentLine.endsWith('\\')) {
-        actions.delete(); // Remove the backslash
-        actions.newLine(); // Insert newline
+        // Use combined action to ensure both operations happen with correct state
+        actions.deleteAndNewLine();
         return;
       }
     }

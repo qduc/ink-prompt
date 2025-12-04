@@ -145,6 +145,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     delete: textInput.delete,
     deleteForward: textInput.deleteForward,
     newLine: textInput.newLine,
+    deleteAndNewLine: textInput.deleteAndNewLine,
     moveCursor: textInput.moveCursor,
     undo: textInput.undo,
     redo: textInput.redo,

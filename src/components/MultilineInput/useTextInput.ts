@@ -21,6 +21,7 @@ export interface UseTextInputResult {
   delete: () => void;
   deleteForward: () => void;
   newLine: () => void;
+  deleteAndNewLine: () => void;
   moveCursor: (direction: Direction) => void;
   undo: () => void;
   redo: () => void;
@@ -81,6 +82,16 @@ export function useTextInput({ initialValue = '' }: UseTextInputProps = {}): Use
     setCursor(result.cursor);
   }, [buffer, cursor, pushToHistory]);
 
+  const deleteAndNewLine = useCallback(() => {
+    pushToHistory(buffer, cursor);
+    // First delete the character before cursor (the backslash)
+    const afterDelete = bufferDeleteChar(buffer, cursor);
+    // Then insert newline using the updated buffer and cursor
+    const afterNewLine = bufferInsertNewLine(afterDelete.buffer, afterDelete.cursor);
+    setBuffer(afterNewLine.buffer);
+    setCursor(afterNewLine.cursor);
+  }, [buffer, cursor, pushToHistory]);
+
   const moveCursor = useCallback(
     (direction: Direction) => {
       const newCursor = bufferMoveCursor(buffer, cursor, direction);
@@ -136,6 +147,7 @@ export function useTextInput({ initialValue = '' }: UseTextInputProps = {}): Use
     delete: deleteChar,
     deleteForward: deleteCharForward,
     newLine,
+    deleteAndNewLine,
     moveCursor,
     undo,
     redo,

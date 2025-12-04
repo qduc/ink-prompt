@@ -81,4 +81,66 @@ describe('useTextInput', () => {
     });
     expect(result.current.value).toBe('a');
   });
+
+  it('should remove backslash when deleted at end of line', () => {
+    const { result } = renderHook(() => useTextInput({ initialValue: 'hello\\' }));
+
+    // Cursor should be at end: { line: 0, column: 6 } (after the backslash)
+    expect(result.current.cursor).toEqual({ line: 0, column: 6 });
+    expect(result.current.value).toBe('hello\\');
+
+    // Delete the backslash
+    act(() => {
+      result.current.delete();
+    });
+
+    // The backslash should be removed
+    expect(result.current.value).toBe('hello');
+    expect(result.current.cursor).toEqual({ line: 0, column: 5 });
+
+    // Then add newline
+    act(() => {
+      result.current.newLine();
+    });
+
+    // Result should be 'hello' on first line, empty second line
+    expect(result.current.value).toBe('hello\n');
+    expect(result.current.cursor).toEqual({ line: 1, column: 0 });
+  });
+
+  it('should fail when delete and newLine are called separately (demonstrates the bug)', () => {
+    const { result } = renderHook(() => useTextInput({ initialValue: 'hello\\' }));
+
+    // Cursor should be at end: { line: 0, column: 6 } (after the backslash)
+    expect(result.current.cursor).toEqual({ line: 0, column: 6 });
+    expect(result.current.value).toBe('hello\\');
+
+    // Call delete and newLine in the same synchronous execution (as old KeyHandler did)
+    act(() => {
+      result.current.delete();
+      result.current.newLine(); // This will use the OLD state!
+    });
+
+    // BUG: The backslash is NOT removed because newLine uses old state
+    // This demonstrates why we need deleteAndNewLine
+    expect(result.current.value).toBe('hello\\\n');
+    expect(result.current.cursor).toEqual({ line: 1, column: 0 });
+  });
+
+  it('should correctly remove backslash using deleteAndNewLine action', () => {
+    const { result } = renderHook(() => useTextInput({ initialValue: 'hello\\' }));
+
+    // Cursor should be at end: { line: 0, column: 6 } (after the backslash)
+    expect(result.current.cursor).toEqual({ line: 0, column: 6 });
+    expect(result.current.value).toBe('hello\\');
+
+    // Use the combined action
+    act(() => {
+      result.current.deleteAndNewLine();
+    });
+
+    // The backslash should be removed and newline added
+    expect(result.current.value).toBe('hello\n');
+    expect(result.current.cursor).toEqual({ line: 1, column: 0 });
+  });
 });

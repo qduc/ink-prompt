@@ -12,6 +12,7 @@ describe('KeyHandler', () => {
       delete: vi.fn(),
       deleteForward: vi.fn(),
       newLine: vi.fn(),
+      deleteAndNewLine: vi.fn(),
       moveCursor: vi.fn(),
       undo: vi.fn(),
       redo: vi.fn(),
@@ -128,28 +129,22 @@ describe('KeyHandler', () => {
 
       handleKey({ return: true }, 'return', buffer, actions, cursor);
 
-      // It should probably remove the backslash first.
-      // Since we are mocking actions, we can't easily verify the state change between calls unless we implement a fake.
-      // But we can check call order.
-      expect(actions.delete).toHaveBeenCalled();
-      expect(actions.newLine).toHaveBeenCalled();
+      // It should use the combined deleteAndNewLine action
+      expect(actions.deleteAndNewLine).toHaveBeenCalledTimes(1);
+      expect(actions.delete).not.toHaveBeenCalled();
+      expect(actions.newLine).not.toHaveBeenCalled();
       expect(actions.submit).not.toHaveBeenCalled();
     });
 
     it('handles Enter as newline if line ends with backslash (multiple lines)', () => {
-        // Cursor is implicitly at the end for this logic usually, or we need to pass cursor to handleKey?
-        // The plan says `handleKey` takes `buffer`. It probably needs `cursor` too to know which line we are on?
-        // Ah, `TextBuffer` logic usually needs cursor.
-        // If `handleKey` decides based on "current line", it needs to know the current line.
-        // So `handleKey` signature should probably include `cursor`.
-
-        const cursor = { line: 1, column: 6 };
+        const cursor = { line: 1, column: 7 };
         buffer = { lines: ['first', 'second\\'] };
 
         handleKey({ return: true }, 'return', buffer, actions, cursor);
 
-        expect(actions.delete).toHaveBeenCalled();
-        expect(actions.newLine).toHaveBeenCalled();
+        expect(actions.deleteAndNewLine).toHaveBeenCalledTimes(1);
+        expect(actions.delete).not.toHaveBeenCalled();
+        expect(actions.newLine).not.toHaveBeenCalled();
         expect(actions.submit).not.toHaveBeenCalled();
     });
   });
