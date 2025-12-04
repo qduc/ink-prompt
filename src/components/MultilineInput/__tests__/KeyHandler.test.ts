@@ -10,6 +10,7 @@ describe('KeyHandler', () => {
     actions = {
       insert: vi.fn(),
       delete: vi.fn(),
+      deleteForward: vi.fn(),
       newLine: vi.fn(),
       moveCursor: vi.fn(),
       undo: vi.fn(),
@@ -41,19 +42,35 @@ describe('KeyHandler', () => {
       expect(actions.moveCursor).toHaveBeenCalledWith('right');
     });
 
-    it('handles Home', () => {
-      // Ink doesn't have a specific 'home' property usually, but we check for special keys
-      // Often represented as key.home if using a specific library or just checking input
-      // For Ink's useInput, we might receive specific sequences.
-      // Assuming we handle it via checking `key` object properties if available, or input string if it maps.
-      // However, standard Ink `Key` interface has `home` and `end`?
-      // Let's assume standard Ink Key interface.
-      handleKey({ home: true }, '', buffer, actions);
+    it('handles Home key via escape sequence', () => {
+      // Home key comes as escape sequence, not key.home
+      handleKey({}, '', buffer, actions, undefined, '\x1b[H');
       expect(actions.moveCursor).toHaveBeenCalledWith('lineStart');
     });
 
-    it('handles End', () => {
-      handleKey({ end: true }, '', buffer, actions);
+    it('handles Home key via alternative escape sequence', () => {
+      handleKey({}, '', buffer, actions, undefined, '\x1bOH');
+      expect(actions.moveCursor).toHaveBeenCalledWith('lineStart');
+    });
+
+    it('handles Ctrl+A as Home alternative', () => {
+      handleKey({ ctrl: true }, 'a', buffer, actions);
+      expect(actions.moveCursor).toHaveBeenCalledWith('lineStart');
+    });
+
+    it('handles End key via escape sequence', () => {
+      // End key comes as escape sequence, not key.end
+      handleKey({}, '', buffer, actions, undefined, '\x1b[F');
+      expect(actions.moveCursor).toHaveBeenCalledWith('lineEnd');
+    });
+
+    it('handles End key via alternative escape sequence', () => {
+      handleKey({}, '', buffer, actions, undefined, '\x1bOF');
+      expect(actions.moveCursor).toHaveBeenCalledWith('lineEnd');
+    });
+
+    it('handles Ctrl+E as End alternative', () => {
+      handleKey({ ctrl: true }, 'e', buffer, actions);
       expect(actions.moveCursor).toHaveBeenCalledWith('lineEnd');
     });
   });
@@ -64,9 +81,9 @@ describe('KeyHandler', () => {
       expect(actions.delete).toHaveBeenCalled();
     });
 
-    it('handles Delete', () => {
-      handleKey({ delete: true }, 'delete', buffer, actions);
-      expect(actions.delete).toHaveBeenCalled(); // Our current simple delete handles backspace, we might need forward delete later
+    it('handles Delete (forward delete)', () => {
+      handleKey({ delete: true }, '', buffer, actions);
+      expect(actions.deleteForward).toHaveBeenCalled();
     });
 
     it('handles Ctrl+J (NewLine)', () => {

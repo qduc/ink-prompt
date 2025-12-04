@@ -75,6 +75,49 @@ export function deleteChar(
 }
 
 /**
+ * Delete character after cursor (forward delete / Delete key)
+ */
+export function deleteCharForward(
+  buffer: Buffer,
+  cursor: Cursor
+): { buffer: Buffer; cursor: Cursor } {
+  const { line, column } = cursor;
+  const currentLine = buffer.lines[line];
+  const lineCount = buffer.lines.length;
+
+  // At the very end of the buffer - nothing to delete
+  if (line === lineCount - 1 && column >= currentLine.length) {
+    return { buffer, cursor };
+  }
+
+  // At the end of a line - merge with next line
+  if (column >= currentLine.length) {
+    const nextLine = buffer.lines[line + 1];
+    const mergedLine = currentLine + nextLine;
+
+    const newLines = [...buffer.lines];
+    newLines[line] = mergedLine;
+    newLines.splice(line + 1, 1);
+
+    return {
+      buffer: { lines: newLines },
+      cursor, // Cursor stays in place
+    };
+  }
+
+  // Delete character after cursor within the line
+  const newLine = currentLine.slice(0, column) + currentLine.slice(column + 1);
+
+  const newLines = [...buffer.lines];
+  newLines[line] = newLine;
+
+  return {
+    buffer: { lines: newLines },
+    cursor, // Cursor stays in place
+  };
+}
+
+/**
  * Insert a new line at cursor position (splits current line)
  */
 export function insertNewLine(

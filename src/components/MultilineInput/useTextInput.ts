@@ -3,6 +3,7 @@ import {
   createBuffer,
   insertChar as bufferInsertChar,
   deleteChar as bufferDeleteChar,
+  deleteCharForward as bufferDeleteCharForward,
   insertNewLine as bufferInsertNewLine,
   moveCursor as bufferMoveCursor,
   getTextContent,
@@ -18,6 +19,7 @@ export interface UseTextInputResult {
   cursor: Cursor;
   insert: (char: string) => void;
   delete: () => void;
+  deleteForward: () => void;
   newLine: () => void;
   moveCursor: (direction: Direction) => void;
   undo: () => void;
@@ -61,6 +63,13 @@ export function useTextInput({ initialValue = '' }: UseTextInputProps = {}): Use
   const deleteChar = useCallback(() => {
     pushToHistory(buffer, cursor);
     const result = bufferDeleteChar(buffer, cursor);
+    setBuffer(result.buffer);
+    setCursor(result.cursor);
+  }, [buffer, cursor, pushToHistory]);
+
+  const deleteCharForward = useCallback(() => {
+    pushToHistory(buffer, cursor);
+    const result = bufferDeleteCharForward(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
   }, [buffer, cursor, pushToHistory]);
@@ -125,6 +134,7 @@ export function useTextInput({ initialValue = '' }: UseTextInputProps = {}): Use
     cursor,
     insert,
     delete: deleteChar,
+    deleteForward: deleteCharForward,
     newLine,
     moveCursor,
     undo,

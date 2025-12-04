@@ -18,7 +18,8 @@ describe('MultilineInputCore', () => {
   describe('Rendering', () => {
     it('renders empty input with cursor', () => {
       const { container } = render(<MultilineInputCore />);
-      expect(container.textContent).toContain('█');
+      // Cursor shows as a space in empty buffer
+      expect(container.textContent).toContain(' ');
     });
 
     it('renders with initial value', () => {
@@ -34,13 +35,13 @@ describe('MultilineInputCore', () => {
 
     it('shows cursor at end of value', () => {
       const { container } = render(<MultilineInputCore value="hi" />);
-      expect(container.textContent).toContain('hi█');
+      // Cursor at end shows as a space after the text
+      expect(container.textContent).toBe('hi ');
     });
 
     it('hides cursor when showCursor is false', () => {
       const { container } = render(<MultilineInputCore value="hello" showCursor={false} />);
-      expect(container.textContent).not.toContain('█');
-      expect(container.textContent).toContain('hello');
+      expect(container.textContent).toBe('hello');
     });
   });
 
@@ -75,8 +76,8 @@ describe('MultilineInputCore', () => {
       const { container } = render(
         <MultilineInputCore placeholder="Type here..." showCursor={true} />
       );
-      // Shows cursor instead, not placeholder
-      expect(container.textContent).toContain('█');
+      // Shows cursor (as space) instead, not placeholder
+      expect(container.textContent).toContain(' ');
       expect(container.textContent).not.toContain('Type here...');
     });
 

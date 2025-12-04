@@ -3,6 +3,7 @@ import {
   createBuffer,
   insertChar,
   deleteChar,
+  deleteCharForward,
   insertNewLine,
   moveCursor,
   getTextContent,
@@ -113,6 +114,56 @@ describe('TextBuffer', () => {
       const result = deleteChar(buffer, cursor);
       expect(result.buffer).toEqual({ lines: ['hello'] });
       expect(result.cursor).toEqual({ line: 0, column: 5 });
+    });
+  });
+
+  describe('deleteCharForward (delete key)', () => {
+    it('does nothing when cursor at buffer end', () => {
+      const buffer = createBuffer('hello');
+      const cursor: Cursor = { line: 0, column: 5 };
+      const result = deleteCharForward(buffer, cursor);
+      expect(result.buffer).toEqual({ lines: ['hello'] });
+      expect(result.cursor).toEqual({ line: 0, column: 5 });
+    });
+
+    it('deletes character after cursor', () => {
+      const buffer = createBuffer('hello');
+      const cursor: Cursor = { line: 0, column: 0 };
+      const result = deleteCharForward(buffer, cursor);
+      expect(result.buffer).toEqual({ lines: ['ello'] });
+      expect(result.cursor).toEqual({ line: 0, column: 0 });
+    });
+
+    it('deletes character in middle of line', () => {
+      const buffer = createBuffer('heello');
+      const cursor: Cursor = { line: 0, column: 2 };
+      const result = deleteCharForward(buffer, cursor);
+      expect(result.buffer).toEqual({ lines: ['hello'] });
+      expect(result.cursor).toEqual({ line: 0, column: 2 });
+    });
+
+    it('merges with next line when at line end', () => {
+      const buffer = createBuffer('hello\nworld');
+      const cursor: Cursor = { line: 0, column: 5 };
+      const result = deleteCharForward(buffer, cursor);
+      expect(result.buffer).toEqual({ lines: ['helloworld'] });
+      expect(result.cursor).toEqual({ line: 0, column: 5 });
+    });
+
+    it('merges next empty line with current', () => {
+      const buffer = createBuffer('hello\n');
+      const cursor: Cursor = { line: 0, column: 5 };
+      const result = deleteCharForward(buffer, cursor);
+      expect(result.buffer).toEqual({ lines: ['hello'] });
+      expect(result.cursor).toEqual({ line: 0, column: 5 });
+    });
+
+    it('does nothing on last line at end', () => {
+      const buffer = createBuffer('hello\nworld');
+      const cursor: Cursor = { line: 1, column: 5 };
+      const result = deleteCharForward(buffer, cursor);
+      expect(result.buffer).toEqual({ lines: ['hello', 'world'] });
+      expect(result.cursor).toEqual({ line: 1, column: 5 });
     });
   });
 

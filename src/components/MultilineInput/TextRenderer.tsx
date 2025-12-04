@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'ink';
+import { Box, Text } from 'ink';
 import type { Buffer, Cursor, WrapResult } from './types.js';
 
 /**
@@ -76,16 +76,25 @@ function renderLineWithCursor(
   line: string,
   cursorCol: number,
   showCursor: boolean
-): string {
+): React.ReactNode {
   if (!showCursor) {
-    return line;
+    return <Text>{line}</Text>;
   }
 
-  const cursorChar = '█';
   const before = line.slice(0, cursorCol);
-  const after = line.slice(cursorCol);
+  const charUnderCursor = cursorCol < line.length ? line[cursorCol] : ' ';
+  const after = line.slice(cursorCol + 1);
 
-  return before + cursorChar + after;
+  // Render the cursor using Ink's Text with inverse colors for high visibility.
+  // We show the actual character under the cursor (or a space at line end)
+  // with inverted colors to make it stand out in any terminal color scheme.
+  return (
+    <>
+      <Text>{before}</Text>
+      <Text inverse>{charUnderCursor}</Text>
+      <Text>{after}</Text>
+    </>
+  );
 }
 
 /**
@@ -100,19 +109,21 @@ export function TextRenderer({
   const { visualLines, cursorVisualRow, cursorVisualCol } = wrapLines(buffer, cursor, width);
 
   return (
-    <div>
+    <Box flexDirection="column">
       {visualLines.map((line, index) => {
         const isCursorRow = index === cursorVisualRow;
-        const displayLine = isCursorRow
-          ? renderLineWithCursor(line, cursorVisualCol, showCursor)
-          : line;
 
         return (
-          <div key={index}>
-              <Text>{displayLine}</Text>
-          </div>
+          <Box key={index}>
+            {isCursorRow ? (
+              // renderLineWithCursor returns a ReactNode composed of Text
+              renderLineWithCursor(line, cursorVisualCol, showCursor)
+            ) : (
+              <Text>{line}</Text>
+            )}
+          </Box>
         );
       })}
-    </div>
+    </Box>
   );
 }

@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback } from 'react';
-import { useInput, useStdout, Box, Text } from 'ink';
+import React, { useEffect, useCallback, useRef } from 'react';
+import { useInput, useStdout, useStdin, Box, Text } from 'ink';
 import { useTextInput } from './useTextInput.js';
 import { handleKey, KeyHandlerActions } from './KeyHandler.js';
 import { TextRenderer } from './TextRenderer.js';
@@ -99,6 +99,24 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   const { stdout } = useStdout();
   const terminalWidth = width ?? stdout?.columns ?? 80;
 
+  // Track raw input for detecting Home/End keys
+  const { stdin } = useStdin();
+  const lastRawInput = useRef<string>('');
+
+  // Listen for raw stdin data to capture escape sequences
+  useEffect(() => {
+    if (!stdin || !isActive) return;
+
+    const handleData = (data: Buffer) => {
+      lastRawInput.current = data.toString();
+    };
+
+    stdin.on('data', handleData);
+    return () => {
+      stdin.off('data', handleData);
+    };
+  }, [stdin, isActive]);
+
   const textInput = useTextInput({ initialValue: value ?? '' });
 
   // Sync external value changes
@@ -125,6 +143,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   const actions: KeyHandlerActions = {
     insert: textInput.insert,
     delete: textInput.delete,
+    deleteForward: textInput.deleteForward,
     newLine: textInput.newLine,
     moveCursor: textInput.moveCursor,
     undo: textInput.undo,
@@ -135,7 +154,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
 
   // Handle keyboard input
   useInput((input: string, key: any) => {
-    handleKey(key, input, buffer, actions, textInput.cursor);
+    handleKey(key, input, buffer, actions, textInput.cursor, lastRawInput.current);
   }, { isActive });
 
   // Show placeholder if empty and no cursor shown

@@ -3,7 +3,28 @@ import { type UseTextInputResult } from './useTextInput.js';
 
 export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor'> {
   submit: () => void;
+  deleteForward: () => void;
 }
+
+/**
+ * Escape sequences for Home key (various terminal emulators)
+ */
+const HOME_SEQUENCES = [
+  '\x1b[H',   // CSI H (xterm)
+  '\x1b[1~',  // CSI 1~ (linux console)
+  '\x1bOH',   // SS3 H (xterm application mode)
+  '\x1b[7~',  // CSI 7~ (rxvt)
+];
+
+/**
+ * Escape sequences for End key (various terminal emulators)
+ */
+const END_SEQUENCES = [
+  '\x1b[F',   // CSI F (xterm)
+  '\x1b[4~',  // CSI 4~ (linux console)
+  '\x1bOF',   // SS3 F (xterm application mode)
+  '\x1b[8~',  // CSI 8~ (rxvt)
+];
 
 /**
  * Handles keyboard input and maps it to text input actions.
@@ -13,13 +34,15 @@ export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'c
  * @param buffer - The current text buffer
  * @param actions - The actions available to modify the state
  * @param cursor - The current cursor position (optional, but required for some logic like backslash check)
+ * @param rawInput - The raw input sequence (optional, used for detecting Home/End keys)
  */
 export function handleKey(
   key: Partial<Key>,
   input: string,
   buffer: Buffer,
   actions: KeyHandlerActions,
-  cursor?: Cursor
+  cursor?: Cursor,
+  rawInput?: string
 ): void {
   // Navigation
   if (key.upArrow) {
@@ -38,16 +61,26 @@ export function handleKey(
     actions.moveCursor('right');
     return;
   }
-  // Home/End (Ink might not provide these directly in all environments, but if it does)
-  // We check for 'home' and 'end' properties if they exist on the key object,
-  // or specific sequences if we were parsing raw input, but here we assume Ink's Key object.
-  // Note: Ink's Key interface might not have home/end in all versions, but we'll assume it does or we extend it.
-  // If not, we might need to check specific input sequences, but for now let's trust the test/types.
-  if ((key as any).home) {
+
+  // Home/End key detection
+  // Ink doesn't expose key.home/key.end, so we check:
+  // 1. Raw escape sequences if available
+  // 2. Ctrl+A (home) and Ctrl+E (end) - common terminal shortcuts
+  if (rawInput && HOME_SEQUENCES.includes(rawInput)) {
     actions.moveCursor('lineStart');
     return;
   }
-  if ((key as any).end) {
+  if (rawInput && END_SEQUENCES.includes(rawInput)) {
+    actions.moveCursor('lineEnd');
+    return;
+  }
+  // Ctrl+A for line start (common in bash/readline)
+  if (key.ctrl && input === 'a') {
+    actions.moveCursor('lineStart');
+    return;
+  }
+  // Ctrl+E for line end (common in bash/readline)
+  if (key.ctrl && input === 'e') {
     actions.moveCursor('lineEnd');
     return;
   }
@@ -74,12 +107,8 @@ export function handleKey(
     return;
   }
   if (key.delete) {
-    // Currently mapped to delete (backspace behavior) as per requirements/tests,
-    // but usually delete is forward.
-    // The plan said "Delete (delete at cursor)", which usually means forward.
-    // But our useTextInput only has `delete` (which is backspace).
-    // For now, we map it to `delete` as per the test "handles Delete".
-    actions.delete();
+    // Delete key - forward delete (delete character after cursor)
+    actions.deleteForward();
     return;
   }
 
