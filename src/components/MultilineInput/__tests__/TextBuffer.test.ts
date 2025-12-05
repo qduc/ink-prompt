@@ -354,6 +354,118 @@ describe('TextBuffer', () => {
       });
     });
 
+    describe('visual navigation with wrapping', () => {
+      // A 25-char line wraps into 3 visual lines with width=10:
+      // Visual 0: "0123456789" (chars 0-9)
+      // Visual 1: "0123456789" (chars 10-19)
+      // Visual 2: "01234"      (chars 20-24)
+      const longLine = '0123456789012345678901234'; // 25 chars
+
+      describe('down with width (visual)', () => {
+        it('moves down within wrapped line', () => {
+          const buffer = createBuffer(longLine);
+          const cursor: Cursor = { line: 0, column: 5 }; // visual row 0, col 5
+          const result = moveCursor(buffer, cursor, 'down', 10);
+          // Should move to visual row 1, col 5 → buffer column 15
+          expect(result).toEqual({ line: 0, column: 15 });
+        });
+
+        it('moves from second visual row to third', () => {
+          const buffer = createBuffer(longLine);
+          const cursor: Cursor = { line: 0, column: 12 }; // visual row 1, col 2
+          const result = moveCursor(buffer, cursor, 'down', 10);
+          // Should move to visual row 2, col 2 → buffer column 22
+          expect(result).toEqual({ line: 0, column: 22 });
+        });
+
+        it('clamps column when moving to shorter visual row', () => {
+          const buffer = createBuffer(longLine);
+          const cursor: Cursor = { line: 0, column: 17 }; // visual row 1, col 7
+          const result = moveCursor(buffer, cursor, 'down', 10);
+          // Visual row 2 only has 5 chars (0-4), so clamp to end of line position (25)
+          // The cursor can be positioned at the end of the line (after the last char)
+          expect(result).toEqual({ line: 0, column: 25 });
+        });
+
+        it('moves from last visual row of one line to first visual row of next line', () => {
+          const buffer = createBuffer(longLine + '\nhello');
+          const cursor: Cursor = { line: 0, column: 22 }; // visual row 2, col 2
+          const result = moveCursor(buffer, cursor, 'down', 10);
+          // Should move to line 1, visual row 0, col 2 → line 1, column 2
+          expect(result).toEqual({ line: 1, column: 2 });
+        });
+
+        it('stays at last visual row of last line', () => {
+          const buffer = createBuffer(longLine);
+          const cursor: Cursor = { line: 0, column: 22 }; // visual row 2, col 2
+          const result = moveCursor(buffer, cursor, 'down', 10);
+          // No more visual rows, stay where we are
+          expect(result).toEqual({ line: 0, column: 22 });
+        });
+      });
+
+      describe('up with width (visual)', () => {
+        it('moves up within wrapped line', () => {
+          const buffer = createBuffer(longLine);
+          const cursor: Cursor = { line: 0, column: 15 }; // visual row 1, col 5
+          const result = moveCursor(buffer, cursor, 'up', 10);
+          // Should move to visual row 0, col 5 → buffer column 5
+          expect(result).toEqual({ line: 0, column: 5 });
+        });
+
+        it('moves from third visual row to second', () => {
+          const buffer = createBuffer(longLine);
+          const cursor: Cursor = { line: 0, column: 22 }; // visual row 2, col 2
+          const result = moveCursor(buffer, cursor, 'up', 10);
+          // Should move to visual row 1, col 2 → buffer column 12
+          expect(result).toEqual({ line: 0, column: 12 });
+        });
+
+        it('moves from first visual row of line to last visual row of previous line', () => {
+          const buffer = createBuffer(longLine + '\nhello');
+          const cursor: Cursor = { line: 1, column: 2 }; // line 1, visual row 0, col 2
+          const result = moveCursor(buffer, cursor, 'up', 10);
+          // Should move to line 0, visual row 2, col 2 → line 0, column 22
+          expect(result).toEqual({ line: 0, column: 22 });
+        });
+
+        it('clamps column when moving to shorter visual row above', () => {
+          const buffer = createBuffer(longLine + '\nhello');
+          const cursor: Cursor = { line: 1, column: 4 }; // line 1, col 4
+          const result = moveCursor(buffer, cursor, 'up', 10);
+          // Move to line 0, visual row 2 (only 5 chars: 0-4)
+          // col 4 is valid, so buffer column = 20 + 4 = 24
+          expect(result).toEqual({ line: 0, column: 24 });
+        });
+
+        it('stays at first visual row of first line', () => {
+          const buffer = createBuffer(longLine);
+          const cursor: Cursor = { line: 0, column: 5 }; // visual row 0, col 5
+          const result = moveCursor(buffer, cursor, 'up', 10);
+          // No more visual rows above, stay where we are
+          expect(result).toEqual({ line: 0, column: 5 });
+        });
+      });
+
+      describe('backward compatibility without width', () => {
+        it('up still works with buffer lines when width not provided', () => {
+          const buffer = createBuffer(longLine + '\nhello');
+          const cursor: Cursor = { line: 1, column: 3 };
+          const result = moveCursor(buffer, cursor, 'up');
+          // Without width, should move to previous buffer line
+          expect(result).toEqual({ line: 0, column: 3 });
+        });
+
+        it('down still works with buffer lines when width not provided', () => {
+          const buffer = createBuffer('hello\n' + longLine);
+          const cursor: Cursor = { line: 0, column: 3 };
+          const result = moveCursor(buffer, cursor, 'down');
+          // Without width, should move to next buffer line
+          expect(result).toEqual({ line: 1, column: 3 });
+        });
+      });
+    });
+
     describe('lineStart', () => {
       it('moves to start of line', () => {
         const buffer = createBuffer('hello');

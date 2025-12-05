@@ -162,12 +162,72 @@ export function insertNewLine(
 }
 
 /**
- * Move cursor in specified direction with bounds checking
+ * Calculate which visual row (within a buffer line) the cursor is on,
+ * and the column within that visual row.
+ */
+function getVisualPosition(
+  bufferColumn: number,
+  lineLength: number,
+  width: number
+): { visualRow: number; visualCol: number } {
+  if (lineLength <= width) {
+    return { visualRow: 0, visualCol: bufferColumn };
+  }
+  const visualRow = Math.floor(bufferColumn / width);
+  const visualCol = bufferColumn % width;
+  return { visualRow, visualCol };
+}
+
+/**
+ * Calculate how many visual rows a buffer line takes.
+ */
+function getVisualRowCount(lineLength: number, width: number): number {
+  if (lineLength === 0) return 1;
+  return Math.ceil(lineLength / width);
+}
+
+/**
+ * Convert visual position back to buffer column.
+ */
+function visualToBufferColumn(
+  visualRow: number,
+  visualCol: number,
+  lineLength: number,
+  width: number
+): number {
+  const bufferColumn = visualRow * width + visualCol;
+  return Math.min(bufferColumn, lineLength);
+}
+
+/**
+ * Get the length of a specific visual row within a buffer line.
+ */
+function getVisualRowLength(
+  lineLength: number,
+  visualRow: number,
+  width: number
+): number {
+  const totalVisualRows = getVisualRowCount(lineLength, width);
+  if (visualRow >= totalVisualRows) return 0;
+
+  if (visualRow === totalVisualRows - 1) {
+    // Last visual row - might be shorter
+    const remaining = lineLength - visualRow * width;
+    return remaining;
+  }
+  return width;
+}
+
+/**
+ * Move cursor in specified direction with bounds checking.
+ * When width is provided, up/down movement is based on visual lines (accounting for wrapping).
+ * When width is not provided, up/down movement is based on buffer lines.
  */
 export function moveCursor(
   buffer: Buffer,
   cursor: Cursor,
-  direction: Direction
+  direction: Direction,
+  width?: number
 ): Cursor {
   const { line, column } = cursor;
   const currentLine = buffer.lines[line];
@@ -195,6 +255,32 @@ export function moveCursor(
       return cursor;
 
     case 'up':
+      if (width !== undefined) {
+        // Visual-aware movement
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine.length, width);
+
+        if (visualRow > 0) {
+          // Move to previous visual row within the same buffer line
+          const targetVisualRow = visualRow - 1;
+          const targetVisualRowLength = getVisualRowLength(currentLine.length, targetVisualRow, width);
+          const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine.length, width) };
+        }
+
+        // At first visual row of current line - move to last visual row of previous buffer line
+        if (line > 0) {
+          const prevLine = buffer.lines[line - 1];
+          const prevLineVisualRows = getVisualRowCount(prevLine.length, width);
+          const targetVisualRow = prevLineVisualRows - 1;
+          const targetVisualRowLength = getVisualRowLength(prevLine.length, targetVisualRow, width);
+          const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
+          return { line: line - 1, column: visualToBufferColumn(targetVisualRow, targetVisualCol, prevLine.length, width) };
+        }
+
+        return cursor;
+      }
+
+      // Buffer-line movement (no width provided)
       if (line > 0) {
         const targetLine = buffer.lines[line - 1];
         return { line: line - 1, column: Math.min(column, targetLine.length) };
@@ -202,6 +288,31 @@ export function moveCursor(
       return cursor;
 
     case 'down':
+      if (width !== undefined) {
+        // Visual-aware movement
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine.length, width);
+        const currentLineVisualRows = getVisualRowCount(currentLine.length, width);
+
+        if (visualRow < currentLineVisualRows - 1) {
+          // Move to next visual row within the same buffer line
+          const targetVisualRow = visualRow + 1;
+          const targetVisualRowLength = getVisualRowLength(currentLine.length, targetVisualRow, width);
+          const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine.length, width) };
+        }
+
+        // At last visual row of current line - move to first visual row of next buffer line
+        if (line < lineCount - 1) {
+          const nextLine = buffer.lines[line + 1];
+          const targetVisualRowLength = getVisualRowLength(nextLine.length, 0, width);
+          const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
+          return { line: line + 1, column: Math.min(targetVisualCol, nextLine.length) };
+        }
+
+        return cursor;
+      }
+
+      // Buffer-line movement (no width provided)
       if (line < lineCount - 1) {
         const targetLine = buffer.lines[line + 1];
         return { line: line + 1, column: Math.min(column, targetLine.length) };

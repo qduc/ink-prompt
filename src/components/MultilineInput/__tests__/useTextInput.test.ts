@@ -143,4 +143,78 @@ describe('useTextInput', () => {
     expect(result.current.value).toBe('hello\n');
     expect(result.current.cursor).toEqual({ line: 1, column: 0 });
   });
+
+  describe('visual navigation with width', () => {
+    // 25-char line with width=10 wraps into 3 visual lines
+    const longLine = '0123456789012345678901234';
+
+    it('should move cursor down within wrapped line', () => {
+      const { result } = renderHook(() => useTextInput({ initialValue: longLine, width: 10 }));
+
+      // Start at end of line (column 25)
+      expect(result.current.cursor).toEqual({ line: 0, column: 25 });
+
+      // Move to column 5 (visual row 0) - each move needs its own act()
+      for (let i = 0; i < 20; i++) {
+        act(() => {
+          result.current.moveCursor('left');
+        });
+      }
+      expect(result.current.cursor).toEqual({ line: 0, column: 5 });
+
+      // Move down - should go to visual row 1, column 5 → buffer column 15
+      act(() => {
+        result.current.moveCursor('down');
+      });
+      expect(result.current.cursor).toEqual({ line: 0, column: 15 });
+    });
+
+    it('should move cursor up within wrapped line', () => {
+      const { result } = renderHook(() => useTextInput({ initialValue: longLine, width: 10 }));
+
+      // Start at end of line (column 25)
+      expect(result.current.cursor).toEqual({ line: 0, column: 25 });
+
+      // Move to column 15 (visual row 1, visual col 5)
+      for (let i = 0; i < 10; i++) {
+        act(() => {
+          result.current.moveCursor('left');
+        });
+      }
+      expect(result.current.cursor).toEqual({ line: 0, column: 15 });
+
+      // Move up - should go to visual row 0, column 5 → buffer column 5
+      act(() => {
+        result.current.moveCursor('up');
+      });
+      expect(result.current.cursor).toEqual({ line: 0, column: 5 });
+    });
+
+    it('should move cursor between buffer lines crossing wrapped visual lines', () => {
+      const { result } = renderHook(() => useTextInput({ initialValue: longLine + '\nhello', width: 10 }));
+
+      // Cursor starts at end of 'hello' (line 1, column 5)
+      expect(result.current.cursor).toEqual({ line: 1, column: 5 });
+
+      // Move up - should go to last visual row of first line (visual row 2, col 5 → buffer col 25)
+      act(() => {
+        result.current.moveCursor('up');
+      });
+      // Visual row 2 only has 5 chars, so col 5 clamps to end of line
+      expect(result.current.cursor).toEqual({ line: 0, column: 25 });
+    });
+
+    it('should use buffer-line movement when width is not provided', () => {
+      const { result } = renderHook(() => useTextInput({ initialValue: longLine + '\nhello' }));
+
+      // Cursor starts at end of 'hello' (line 1, column 5)
+      expect(result.current.cursor).toEqual({ line: 1, column: 5 });
+
+      // Move up without width - should go to line 0, column 5 (buffer line movement)
+      act(() => {
+        result.current.moveCursor('up');
+      });
+      expect(result.current.cursor).toEqual({ line: 0, column: 5 });
+    });
+  });
 });

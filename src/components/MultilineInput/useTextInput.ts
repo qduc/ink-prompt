@@ -13,6 +13,8 @@ import { log } from '../../utils/logger.js';
 
 export interface UseTextInputProps {
   initialValue?: string;
+  /** Terminal width for visual-aware cursor navigation (up/down arrows respect line wrapping) */
+  width?: number;
 }
 
 export interface UseTextInputResult {
@@ -34,7 +36,7 @@ interface HistoryState {
   cursor: Cursor;
 }
 
-export function useTextInput({ initialValue = '' }: UseTextInputProps = {}): UseTextInputResult {
+export function useTextInput({ initialValue = '', width }: UseTextInputProps = {}): UseTextInputResult {
   const [buffer, setBuffer] = useState<Buffer>(() => createBuffer(initialValue));
   const [cursor, setCursor] = useState<Cursor>(() => {
     const lines = initialValue.split('\n');
@@ -102,10 +104,10 @@ export function useTextInput({ initialValue = '' }: UseTextInputProps = {}): Use
 
   const moveCursor = useCallback(
     (direction: Direction) => {
-      const newCursor = bufferMoveCursor(buffer, cursor, direction);
+      const newCursor = bufferMoveCursor(buffer, cursor, direction, width);
       setCursor(newCursor);
     },
-    [buffer, cursor]
+    [buffer, cursor, width]
   );
 
   const undo = useCallback(() => {

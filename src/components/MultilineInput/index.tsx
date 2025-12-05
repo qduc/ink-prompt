@@ -118,7 +118,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     };
   }, [stdin, isActive]);
 
-  const textInput = useTextInput({ initialValue: value ?? '' });
+  const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth });
 
   // Sync external value changes
   useEffect(() => {
