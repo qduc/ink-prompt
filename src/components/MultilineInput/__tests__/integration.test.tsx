@@ -16,7 +16,7 @@ import { MultilineInputCore } from '../index.js';
 
 describe('MultilineInputCore', () => {
     describe('Submission', () => {
-      it('clears input after submit', () => {
+      it('clears input when parent updates value prop to empty', () => {
         const onSubmit = vi.fn();
         const onChange = vi.fn();
         // Simulate controlled usage: value is managed by parent
@@ -27,12 +27,17 @@ describe('MultilineInputCore', () => {
 
         // Simulate submit: parent receives value, then clears
         onSubmit(value);
+        onChange.mockClear(); // Clear previous calls
+
         value = '';
         rerender(<MultilineInputCore value={value} onSubmit={onSubmit} onChange={onChange} />);
 
         // After rerender, input should be empty
         expect(container.textContent).toContain(' '); // Cursor in empty buffer
-        expect(onChange).toHaveBeenCalledWith('');
+
+        // onChange should NOT be called when parent updates value prop
+        // (this is a prop sync, not user input - controlled component pattern)
+        expect(onChange).not.toHaveBeenCalled();
       });
     });
   describe('Rendering', () => {
@@ -74,13 +79,61 @@ describe('MultilineInputCore', () => {
       expect(container.textContent).toContain('abcde');
       expect(container.textContent).toContain('fghij');
     });
+  });
 
-    it('calls onChange on initial render with value', () => {
+  describe('Controlled component behavior', () => {
+    it('does NOT call onChange when value prop is updated by parent', () => {
+      // This tests the controlled component pattern:
+      // onChange should only fire for user-initiated changes, not prop updates
       const onChange = vi.fn();
-      render(<MultilineInputCore value="test" onChange={onChange} />);
 
-      // onChange is called with the initial value
-      expect(onChange).toHaveBeenCalledWith('test');
+      const { rerender, container } = render(
+        <MultilineInputCore value="initial" onChange={onChange} />
+      );
+      expect(container.textContent).toContain('initial');
+
+      // Clear any calls from initial render
+      onChange.mockClear();
+
+      // Parent updates the value prop (simulating parent state change)
+      rerender(<MultilineInputCore value="updated by parent" onChange={onChange} />);
+
+      // The component should sync the new value...
+      expect(container.textContent).toContain('updated by parent');
+
+      // ...but should NOT call onChange (this is a prop sync, not user input)
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('does NOT create feedback loop when parent updates value', () => {
+      // Regression test for feedback loop bug:
+      // 1. Parent calls onChange(newValue)
+      // 2. Parent updates value prop
+      // 3. Component syncs internal state to match prop
+      // 4. BUG: Component calls onChange again with the same value!
+      // 5. This creates an infinite loop
+      const onChange = vi.fn();
+      let externalValue = 'start';
+
+      const { rerender } = render(
+        <MultilineInputCore value={externalValue} onChange={onChange} />
+      );
+
+      onChange.mockClear();
+
+      // Simulate what happens after user types and parent updates value prop
+      externalValue = 'user typed this';
+      rerender(<MultilineInputCore value={externalValue} onChange={onChange} />);
+
+      // Should NOT call onChange - this would cause infinite loop
+      expect(onChange).not.toHaveBeenCalled();
+
+      // Update again
+      externalValue = 'another update';
+      rerender(<MultilineInputCore value={externalValue} onChange={onChange} />);
+
+      // Still should not call onChange
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
 
