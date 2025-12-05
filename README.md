@@ -39,18 +39,6 @@ render(<App />);
 - `Ctrl+Z`/`Ctrl+Y` for undo/redo
 - Enter submits the current buffer
 
-## Manual testing
-
-A runnable Ink playground lives in `examples/basic.tsx`. Build the library once
-and launch the example with:
-
-```bash
-npm run example
-```
-
-This renders the component in your terminal so you can try the editing and
-submission workflow manually. Press `Ctrl+C` to exit when you're done.
-
 ## Development
 
 ```bash

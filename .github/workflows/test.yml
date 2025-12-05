@@ -1,0 +1,65 @@
+name: Test
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [18, 20, 22]
+        ink-version: ['4.4.1', '5.2.1', '6.5.1']
+        react-version: ['18.2.0', '18.3.1', '19.0.0']
+        exclude:
+          # Ink 6 requires React 19
+          - ink-version: '6.5.1'
+            react-version: '18.2.0'
+          - ink-version: '6.5.1'
+            react-version: '18.3.1'
+          # React 19 doesn't work with Ink 4/5
+          - ink-version: '4.4.1'
+            react-version: '19.0.0'
+          - ink-version: '5.2.1'
+            react-version: '19.0.0'
+
+    name: Node ${{ matrix.node-version }} / Ink ${{ matrix.ink-version }} / React ${{ matrix.react-version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Cache matrix dependencies
+        id: cache-matrix
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: matrix-modules-${{ runner.os }}-node-${{ matrix.node-version }}-ink-${{ matrix.ink-version }}-react-${{ matrix.react-version }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.cache-matrix.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Install matrix versions
+        if: steps.cache-matrix.outputs.cache-hit != 'true'
+        run: |
+          npm install --save-dev ink@${{ matrix.ink-version }} react@${{ matrix.react-version }}
+          # Also install react-dom to match react version
+          if [ "${{ matrix.react-version }}" = "19.0.0" ]; then
+
+      - name: Run type check
+        run: npm run type-check
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
