@@ -8,23 +8,49 @@ import { createBuffer } from './TextBuffer.js';
 import { log } from '../../utils/logger.js';
 
 export interface MultilineInputProps {
-  /** Controlled text value */
+  /**
+   * Controlled text value. When provided, the component becomes controlled
+   * and the value is managed externally.
+   */
   value?: string;
-  /** Called when text changes */
+  /**
+   * Called when the text content changes due to user input. Receives the
+   * new text value as a parameter.
+   */
   onChange?: (value: string) => void;
-  /** Called when user submits (Enter without backslash) */
+  /**
+   * Called when the user submits the input (typically by pressing Enter
+   * without a backslash at the end). Receives the final text value.
+   */
   onSubmit?: (value: string) => void;
-  /** Placeholder text when empty */
+  /**
+   * Placeholder text displayed when the input is empty and the cursor
+   * is not shown.
+   */
   placeholder?: string;
-  /** Whether to show the cursor (defaults to true) */
+  /**
+   * Whether to display the cursor. Defaults to true.
+   */
   showCursor?: boolean;
-  /** Terminal width for word wrapping */
+  /**
+   * Terminal width for word wrapping. If not provided, uses the terminal's
+   * current width with resize support.
+   */
   width?: number;
-  /** Whether input is active/focused (defaults to true) */
+  /**
+   * Whether the input is active and focused, allowing keyboard input.
+   * Defaults to true.
+   */
   isActive?: boolean;
-  /** Called whenever the cursor offset changes (flat index) */
+  /**
+   * Called whenever the cursor position changes. Receives the flat
+   * character offset as a parameter.
+   */
   onCursorChange?: (offset: number) => void;
-  /** Optional external cursor override (flat index) */
+  /**
+   * Optional external cursor position override. When set, forces the
+   * cursor to the specified flat character offset.
+   */
   cursorOverride?: number;
   /**
    * Called when an arrow key is pressed but cursor is at a boundary.
@@ -41,14 +67,53 @@ export interface MultilineInputProps {
  * This allows testing the rendering logic separately.
  */
 export interface MultilineInputCoreProps {
+  /**
+   * Controlled text value. When provided, the component becomes controlled
+   * and the text is managed externally.
+   */
   value?: string;
+  /**
+   * Called when the text content changes. Receives the new text value
+   * as a parameter.
+   */
   onChange?: (value: string) => void;
+  /**
+   * Called when the user submits the input (typically by pressing Enter
+   * without a backslash at the end).
+   */
   onSubmit?: (value: string) => void;
+  /**
+   * Placeholder text displayed when the input is empty and the cursor
+   * is not shown.
+   */
   placeholder?: string;
+  /**
+   * Whether to display the cursor. Defaults to true.
+   */
   showCursor?: boolean;
+  /**
+   * Terminal width for word wrapping. If not provided, uses the terminal's
+   * current width.
+   */
   width?: number;
+  /**
+   * Called whenever the cursor position changes. Receives the flat
+   * character offset as a parameter.
+   */
   onCursorChange?: (offset: number) => void;
+  /**
+   * Optional external cursor position override. When set, forces the
+   * cursor to the specified flat character offset.
+   */
   cursorOverride?: number;
+  /**
+   * Called when an arrow key is pressed but cursor is at a boundary.
+   * - 'up': cursor is on the first/topmost line
+   * - 'down': cursor is on the last/bottommost line
+   * - 'left': cursor is at position 0 (start of text)
+   * - 'right': cursor is at end of text (after last character)
+   */
+  onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
 }
 
 /**
