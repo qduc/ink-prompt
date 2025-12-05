@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createBuffer,
-  insertChar,
+  insertText,
   deleteChar,
   deleteCharForward,
   insertNewLine,
@@ -33,11 +33,11 @@ describe('TextBuffer', () => {
     });
   });
 
-  describe('insertChar', () => {
+  describe('insertText', () => {
     it('inserts character into empty buffer', () => {
       const buffer = createBuffer();
       const cursor: Cursor = { line: 0, column: 0 };
-      const result = insertChar(buffer, cursor, 'a');
+      const result = insertText(buffer, cursor, 'a');
       expect(result.buffer).toEqual({ lines: ['a'] });
       expect(result.cursor).toEqual({ line: 0, column: 1 });
     });
@@ -45,7 +45,7 @@ describe('TextBuffer', () => {
     it('inserts character at end of line', () => {
       const buffer = createBuffer('hello');
       const cursor: Cursor = { line: 0, column: 5 };
-      const result = insertChar(buffer, cursor, '!');
+      const result = insertText(buffer, cursor, '!');
       expect(result.buffer).toEqual({ lines: ['hello!'] });
       expect(result.cursor).toEqual({ line: 0, column: 6 });
     });
@@ -53,7 +53,7 @@ describe('TextBuffer', () => {
     it('inserts character in middle of line', () => {
       const buffer = createBuffer('hllo');
       const cursor: Cursor = { line: 0, column: 1 };
-      const result = insertChar(buffer, cursor, 'e');
+      const result = insertText(buffer, cursor, 'e');
       expect(result.buffer).toEqual({ lines: ['hello'] });
       expect(result.cursor).toEqual({ line: 0, column: 2 });
     });
@@ -61,7 +61,7 @@ describe('TextBuffer', () => {
     it('inserts character at line start', () => {
       const buffer = createBuffer('ello');
       const cursor: Cursor = { line: 0, column: 0 };
-      const result = insertChar(buffer, cursor, 'h');
+      const result = insertText(buffer, cursor, 'h');
       expect(result.buffer).toEqual({ lines: ['hello'] });
       expect(result.cursor).toEqual({ line: 0, column: 1 });
     });
@@ -69,9 +69,69 @@ describe('TextBuffer', () => {
     it('inserts into specific line of multi-line buffer', () => {
       const buffer = createBuffer('line1\nline2\nline3');
       const cursor: Cursor = { line: 1, column: 4 };
-      const result = insertChar(buffer, cursor, 'X');
+      const result = insertText(buffer, cursor, 'X');
       expect(result.buffer).toEqual({ lines: ['line1', 'lineX2', 'line3'] });
       expect(result.cursor).toEqual({ line: 1, column: 5 });
+    });
+
+    describe('multi-character insertion', () => {
+      it('inserts multiple characters at once', () => {
+        const buffer = createBuffer('world');
+        const cursor: Cursor = { line: 0, column: 0 };
+        const result = insertText(buffer, cursor, 'hello ');
+        expect(result.buffer).toEqual({ lines: ['hello world'] });
+        expect(result.cursor).toEqual({ line: 0, column: 6 });
+      });
+
+      it('inserts multi-char string in middle of line', () => {
+        const buffer = createBuffer('helloworld');
+        const cursor: Cursor = { line: 0, column: 5 };
+        const result = insertText(buffer, cursor, ', beautiful ');
+        expect(result.buffer).toEqual({ lines: ['hello, beautiful world'] });
+        expect(result.cursor).toEqual({ line: 0, column: 17 });
+      });
+    });
+
+    describe('multi-line insertion', () => {
+      it('handles text with single newline', () => {
+        const buffer = createBuffer('');
+        const cursor: Cursor = { line: 0, column: 0 };
+        const result = insertText(buffer, cursor, 'hello\nworld');
+        expect(result.buffer).toEqual({ lines: ['hello', 'world'] });
+        expect(result.cursor).toEqual({ line: 1, column: 5 });
+      });
+
+      it('handles text with multiple newlines', () => {
+        const buffer = createBuffer('');
+        const cursor: Cursor = { line: 0, column: 0 };
+        const result = insertText(buffer, cursor, 'line1\nline2\nline3');
+        expect(result.buffer).toEqual({ lines: ['line1', 'line2', 'line3'] });
+        expect(result.cursor).toEqual({ line: 2, column: 5 });
+      });
+
+      it('inserts multi-line text in middle of line', () => {
+        const buffer = createBuffer('helloworld');
+        const cursor: Cursor = { line: 0, column: 5 };
+        const result = insertText(buffer, cursor, '\nthere\n');
+        expect(result.buffer).toEqual({ lines: ['hello', 'there', 'world'] });
+        expect(result.cursor).toEqual({ line: 2, column: 0 });
+      });
+
+      it('handles paste with trailing content', () => {
+        const buffer = createBuffer('start end');
+        const cursor: Cursor = { line: 0, column: 6 };
+        const result = insertText(buffer, cursor, 'mid1\nmid2');
+        expect(result.buffer).toEqual({ lines: ['start mid1', 'mid2end'] });
+        expect(result.cursor).toEqual({ line: 1, column: 4 });
+      });
+
+      it('handles empty lines from consecutive newlines', () => {
+        const buffer = createBuffer('hello');
+        const cursor: Cursor = { line: 0, column: 5 };
+        const result = insertText(buffer, cursor, '\n\nworld');
+        expect(result.buffer).toEqual({ lines: ['hello', '', 'world'] });
+        expect(result.cursor).toEqual({ line: 2, column: 5 });
+      });
     });
   });
 

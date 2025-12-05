@@ -1,5 +1,6 @@
 This file provides guidance to AI assistants when working with code in this repository.
-REMEMBER: This file must be kept up-to-date with every significant change to the project. It is your job to do it without waiting for the user request.
+
+REMEMBER: This file must be kept up-to-date with every _architecture_ change to the project. It is your job to do it without waiting for user's request.
 
 ## Project Overview
 
@@ -35,6 +36,12 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
   - Each component lives in its own directory with an `index.tsx` file
   - Components export both the component and their prop types
 - `src/index.ts` - Main entry point that re-exports all public APIs
+
+**Utilities:**
+- `src/utils/logger.ts` - File-based debug logger
+  - `log(message)` - Writes timestamped debug messages to a log file
+  - `initLogger()` - Clears any existing log file (call once at app start)
+  - Log file location: `$INK_PROMPT_LOG_FILE` env var or `./ink-prompt.debug.log`
 
 **Build System:**
 - TypeScript compiles from `src/` to `dist/`

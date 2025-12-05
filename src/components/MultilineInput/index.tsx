@@ -4,6 +4,7 @@ import { useTextInput } from './useTextInput.js';
 import { handleKey, KeyHandlerActions } from './KeyHandler.js';
 import { TextRenderer } from './TextRenderer.js';
 import { createBuffer } from './TextBuffer.js';
+import { log } from '../../utils/logger.js';
 
 export interface MultilineInputProps {
   /** Controlled text value */
@@ -156,6 +157,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
 
   // Handle keyboard input
   useInput((input: string, key: any) => {
+    log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
     handleKey(key, input, buffer, actions, textInput.cursor, lastRawInput.current);
   }, { isActive });
 

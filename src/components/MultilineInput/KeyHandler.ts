@@ -1,5 +1,6 @@
 import { type Key, type Buffer, type Cursor, type Direction } from './types.js';
 import { type UseTextInputResult } from './useTextInput.js';
+import { log } from '../../utils/logger.js';
 
 export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor'> {
   submit: () => void;
@@ -113,9 +114,9 @@ export function handleKey(
 
   // Submission / New Line
   if (key.return) {
+    log(`[KEYHANDLER] return key, cursor=${JSON.stringify(cursor)}, currentLine="${(cursor ? buffer.lines[cursor.line || 0] : 'no cursor').replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" endsWithBackslash=${cursor ? buffer.lines[cursor.line || 0].endsWith('\\') : false}`);
     if (cursor) {
-      const currentLine = buffer.lines[cursor.line];
-      // Check if line ends with backslash AND cursor is at the end (or we just check the line content?)
+      const currentLine = buffer.lines[cursor.line];      // Check if line ends with backslash AND cursor is at the end (or we just check the line content?)
       // Requirement: "Line ending with \ + Enter continues to next line"
       // Usually this implies the user typed '\' then Enter.
       // We should probably check if the character *before* the cursor is '\' if we want to be precise,
@@ -129,6 +130,7 @@ export function handleKey(
       }
     }
 
+    log(`[KEYHANDLER] submit value lines=${buffer.lines.length} lastLine="${buffer.lines[buffer.lines.length-1]?.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}"`);
     actions.submit();
     return;
   }
@@ -140,6 +142,7 @@ export function handleKey(
   }
 
   if (input) {
+    log(`[KEYHANDLER] insert input="${input.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" len=${input.length} cursor=${JSON.stringify(cursor || {})} bufferLines=${buffer.lines.length}`);
     actions.insert(input);
   }
 }

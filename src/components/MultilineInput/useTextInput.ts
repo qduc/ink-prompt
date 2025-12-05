@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   createBuffer,
-  insertChar as bufferInsertChar,
+  insertText as bufferInsertText,
   deleteChar as bufferDeleteChar,
   deleteCharForward as bufferDeleteCharForward,
   insertNewLine as bufferInsertNewLine,
@@ -9,6 +9,7 @@ import {
   getTextContent,
 } from './TextBuffer.js';
 import type { Buffer, Cursor, Direction } from './types.js';
+import { log } from '../../utils/logger.js';
 
 export interface UseTextInputProps {
   initialValue?: string;
@@ -53,8 +54,15 @@ export function useTextInput({ initialValue = '' }: UseTextInputProps = {}): Use
 
   const insert = useCallback(
     (char: string) => {
+      log(`[INSERT] char="${char.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" len=${char.length} cursor={line:${cursor.line},col:${cursor.column}} linesBefore=${buffer.lines.length}`);
+
+      // Normalize line endings: \r\n → \n, \r → \n (handles Windows, Unix, and old Mac)
+      const normalized = char.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
       pushToHistory(buffer, cursor);
-      const result = bufferInsertChar(buffer, cursor, char);
+
+      // TextBuffer now handles multi-line insertion internally
+      const result = bufferInsertText(buffer, cursor, normalized);
       setBuffer(result.buffer);
       setCursor(result.cursor);
     },

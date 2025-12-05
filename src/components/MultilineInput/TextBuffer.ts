@@ -11,23 +11,44 @@ export function createBuffer(text?: string): Buffer {
 }
 
 /**
- * Insert a character at the cursor position
+ * Insert text at the cursor position.
+ * Handles both single-line and multi-line text (containing \n).
  */
-export function insertChar(
+export function insertText(
   buffer: Buffer,
   cursor: Cursor,
-  char: string
+  text: string
 ): { buffer: Buffer; cursor: Cursor } {
+  if (!text) return { buffer, cursor };
+
   const { line, column } = cursor;
   const currentLine = buffer.lines[line];
-  const newLine = currentLine.slice(0, column) + char + currentLine.slice(column);
 
-  const newLines = [...buffer.lines];
-  newLines[line] = newLine;
+  // Insert text and handle newlines
+  const beforeCursor = currentLine.slice(0, column);
+  const afterCursor = currentLine.slice(column);
+  const fullText = beforeCursor + text + afterCursor;
+
+  // Split into lines
+  const newLines = fullText.split('\n');
+
+  // Calculate new cursor position
+  const textLines = text.split('\n');
+  const cursorLine = line + (textLines.length - 1);
+  const cursorColumn = textLines.length === 1
+    ? column + text.length
+    : textLines[textLines.length - 1].length;
+
+  // Rebuild buffer
+  const resultLines = [
+    ...buffer.lines.slice(0, line),
+    ...newLines,
+    ...buffer.lines.slice(line + 1),
+  ];
 
   return {
-    buffer: { lines: newLines },
-    cursor: { line, column: column + 1 },
+    buffer: { lines: resultLines },
+    cursor: { line: cursorLine, column: cursorColumn },
   };
 }
 
