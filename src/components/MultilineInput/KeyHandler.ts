@@ -2,7 +2,7 @@ import { type Key, type Buffer, type Cursor, type Direction } from './types.js';
 import { type UseTextInputResult } from './useTextInput.js';
 import { log } from '../../utils/logger.js';
 
-export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor'> {
+export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor' | 'cursorOffset' | 'setCursorOffset'> {
   submit: () => void;
 }
 

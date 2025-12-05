@@ -21,6 +21,10 @@ export interface MultilineInputProps {
   width?: number;
   /** Whether input is active/focused (defaults to true) */
   isActive?: boolean;
+  /** Called whenever the cursor offset changes (flat index) */
+  onCursorChange?: (offset: number) => void;
+  /** Optional external cursor override (flat index) */
+  cursorOverride?: number;
 }
 
 /**
@@ -34,6 +38,8 @@ export interface MultilineInputCoreProps {
   placeholder?: string;
   showCursor?: boolean;
   width?: number;
+  onCursorChange?: (offset: number) => void;
+  cursorOverride?: number;
 }
 
 /**
@@ -46,8 +52,31 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   placeholder,
   showCursor = true,
   width = 80,
+  onCursorChange,
+  cursorOverride,
 }) => {
   const textInput = useTextInput({ initialValue: value ?? '' });
+
+  // Handle cursor override
+  useEffect(() => {
+    if (cursorOverride !== undefined) {
+      textInput.setCursorOffset(cursorOverride);
+    }
+  }, [cursorOverride]);
+
+  // Notify parent of cursor change
+  // Use a ref to avoid dependency on onCursorChange callback identity
+  const onCursorChangeRef = useRef(onCursorChange);
+  useEffect(() => {
+    onCursorChangeRef.current = onCursorChange;
+  }, [onCursorChange]);
+
+  useEffect(() => {
+    if (onCursorChangeRef.current) {
+      onCursorChangeRef.current(textInput.cursorOffset);
+    }
+  }, [textInput.cursorOffset]);
+
 
   // Sync external value changes
   useEffect(() => {
@@ -94,6 +123,8 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   showCursor = true,
   width,
   isActive = true,
+  onCursorChange,
+  cursorOverride,
 }) => {
 
   // Get terminal width from Ink if not provided
@@ -119,6 +150,24 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   }, [stdin, isActive]);
 
   const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth });
+
+  // Handle cursor override
+  useEffect(() => {
+    if (cursorOverride !== undefined) {
+      textInput.setCursorOffset(cursorOverride);
+    }
+  }, [cursorOverride]);
+
+  // Notify parent of cursor change
+  const onCursorChangeRef = useRef(onCursorChange);
+  useEffect(() => {
+    onCursorChangeRef.current = onCursorChange;
+  }, [onCursorChange]);
+
+  useEffect(() => {
+    onCursorChangeRef.current?.(textInput.cursorOffset);
+  }, [textInput.cursorOffset]);
+
 
   // Sync external value changes
   useEffect(() => {

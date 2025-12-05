@@ -340,3 +340,60 @@ export function getTextContent(buffer: Buffer): string {
   }
   return buffer.lines.join('\n');
 }
+
+/**
+ * Get the flat offset (index) from a cursor position.
+ */
+export function getOffset(buffer: Buffer, cursor: Cursor): number {
+  let offset = 0;
+  for (let i = 0; i < cursor.line; i++) {
+    offset += buffer.lines[i].length + 1; // +1 for the newline
+  }
+  offset += cursor.column;
+  return offset;
+}
+
+/**
+ * Get the cursor position from a flat offset.
+ */
+export function getCursor(buffer: Buffer, offset: number): Cursor {
+  let currentOffset = 0;
+  for (let i = 0; i < buffer.lines.length; i++) {
+    const lineLength = buffer.lines[i].length;
+    // Check if the offset falls within this line (including the newline character unless it's the last line)
+    // We treat the position *after* the newline as the start of the next line.
+    // Position *at* the end of line (before newline) is valid cursor column.
+
+    // If we are on the last line, we accept up to lineLength
+    if (i === buffer.lines.length - 1) {
+      if (offset <= currentOffset + lineLength) {
+        return { line: i, column: Math.max(0, offset - currentOffset) };
+      }
+      // If offset is beyond the content, clamp to end
+      return { line: i, column: lineLength };
+    }
+
+    // For non-last lines, we account for newline character (+1)
+    if (offset <= currentOffset + lineLength) {
+      return { line: i, column: Math.max(0, offset - currentOffset) };
+    }
+
+    // If offset is exactly at the newline character, it depends on interpretation.
+    // Usually, cursor at the newline means it's at the end of the line.
+    // But if we are "past" the newline, we are on the start of next line.
+    // Logic:
+    // Line 0: "abc" (len 3). Newline at index 3.
+    // Index 0='a', 1='b', 2='c', 3='\n'.
+    // If target offset is 3: That's end of line 0.
+    // If target offset is 4: That's start of line 1.
+    // currentOffset + lineLength is index of newline.
+
+    // If offset == currentOffset + lineLength + 1, we move to next loop
+
+    currentOffset += lineLength + 1;
+  }
+
+  // Fallback (should have returned in loop)
+  const lastLineIdx = buffer.lines.length - 1;
+  return { line: lastLineIdx, column: buffer.lines[lastLineIdx].length };
+}

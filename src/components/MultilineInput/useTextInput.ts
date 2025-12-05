@@ -7,6 +7,8 @@ import {
   insertNewLine as bufferInsertNewLine,
   moveCursor as bufferMoveCursor,
   getTextContent,
+  getOffset,
+  getCursor,
 } from './TextBuffer.js';
 import type { Buffer, Cursor, Direction } from './types.js';
 import { log } from '../../utils/logger.js';
@@ -29,6 +31,8 @@ export interface UseTextInputResult {
   undo: () => void;
   redo: () => void;
   setText: (text: string) => void;
+  cursorOffset: number;
+  setCursorOffset: (offset: number) => void;
 }
 
 interface HistoryState {
@@ -162,5 +166,12 @@ export function useTextInput({ initialValue = '', width }: UseTextInputProps = {
     undo,
     redo,
     setText,
+    cursorOffset: getOffset(buffer, cursor),
+    setCursorOffset: useCallback(
+      (offset: number) => {
+        setCursor(getCursor(buffer, offset));
+      },
+      [buffer]
+    ),
   };
 }
