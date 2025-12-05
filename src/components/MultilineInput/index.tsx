@@ -57,6 +57,9 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
 }) => {
   const textInput = useTextInput({ initialValue: value ?? '' });
 
+  // Track whether a value change is from syncing props (not user input)
+  const isSyncingFromProps = useRef(false);
+
   // Handle cursor override
   useEffect(() => {
     if (cursorOverride !== undefined) {
@@ -81,14 +84,25 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   // Sync external value changes
   useEffect(() => {
     if (value !== undefined && value !== textInput.value) {
+      isSyncingFromProps.current = true;
       textInput.setText(value);
     }
   }, [value]);
 
-  // Notify parent of changes
+  // Notify parent of changes - but only for user-initiated changes
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange?.(textInput.value);
-  }, [textInput.value, onChange]);
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (isSyncingFromProps.current) {
+      // This change was from syncing props, not user input - don't call onChange
+      isSyncingFromProps.current = false;
+      return;
+    }
+    onChangeRef.current?.(textInput.value);
+  }, [textInput.value]);
 
   // Create buffer for TextRenderer
   const buffer = createBuffer(textInput.value);
@@ -168,18 +182,31 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     onCursorChangeRef.current?.(textInput.cursorOffset);
   }, [textInput.cursorOffset]);
 
+  // Track whether a value change is from syncing props (not user input)
+  const isSyncingFromProps = useRef(false);
 
   // Sync external value changes
   useEffect(() => {
     if (value !== undefined && value !== textInput.value) {
+      isSyncingFromProps.current = true;
       textInput.setText(value);
     }
   }, [value]);
 
-  // Notify parent of changes
+  // Notify parent of changes - but only for user-initiated changes
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange?.(textInput.value);
-  }, [textInput.value, onChange]);
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (isSyncingFromProps.current) {
+      // This change was from syncing props, not user input - don't call onChange
+      isSyncingFromProps.current = false;
+      return;
+    }
+    onChangeRef.current?.(textInput.value);
+  }, [textInput.value]);
 
   // Create buffer for TextRenderer and KeyHandler
   const buffer = createBuffer(textInput.value);

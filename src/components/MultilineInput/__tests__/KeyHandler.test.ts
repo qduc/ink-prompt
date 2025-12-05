@@ -87,6 +87,12 @@ describe('KeyHandler', () => {
       expect(actions.deleteForward).toHaveBeenCalled();
     });
 
+    it('treats DEL (0x7f) raw input as backspace even if reported as delete', () => {
+      handleKey({ delete: true }, '', buffer, actions, undefined, '');
+      expect(actions.delete).toHaveBeenCalled();
+      expect(actions.deleteForward).not.toHaveBeenCalled();
+    });
+
     it('handles Ctrl+J (NewLine)', () => {
       handleKey({ ctrl: true }, 'j', buffer, actions);
       expect(actions.newLine).toHaveBeenCalled();
