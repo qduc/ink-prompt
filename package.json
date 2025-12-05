@@ -1,6 +1,6 @@
 {
   "name": "ink-prompt",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A React Ink component for prompts",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +12,9 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc",
@@ -32,6 +34,10 @@
   ],
   "author": "Duc Nguyen",
   "license": "MIT",
+  "repository": "github:qduc/ink-prompt",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "ink": "^4.0.0 || ^5.0.0 || ^6.0.0",
     "react": "^18.0.0"
