@@ -76,6 +76,229 @@ describe('KeyHandler', () => {
     });
   });
 
+  describe('Boundary Arrow', () => {
+    describe('Left boundary', () => {
+      it('calls onBoundaryArrow("left") when cursor is at position 0', () => {
+        buffer = { lines: ['hello'] };
+        const cursor = { line: 0, column: 0 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ leftArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).toHaveBeenCalledWith('left');
+        expect(actions.moveCursor).not.toHaveBeenCalled();
+      });
+
+      it('does not call onBoundaryArrow when cursor can move left', () => {
+        buffer = { lines: ['hello'] };
+        const cursor = { line: 0, column: 3 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ leftArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('left');
+      });
+
+      it('does not call onBoundaryArrow when at start of line but previous line exists', () => {
+        buffer = { lines: ['first', 'second'] };
+        const cursor = { line: 1, column: 0 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ leftArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('left');
+      });
+    });
+
+    describe('Right boundary', () => {
+      it('calls onBoundaryArrow("right") when cursor is at end of text', () => {
+        buffer = { lines: ['hello'] };
+        const cursor = { line: 0, column: 5 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ rightArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).toHaveBeenCalledWith('right');
+        expect(actions.moveCursor).not.toHaveBeenCalled();
+      });
+
+      it('does not call onBoundaryArrow when cursor can move right', () => {
+        buffer = { lines: ['hello'] };
+        const cursor = { line: 0, column: 2 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ rightArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('right');
+      });
+
+      it('does not call onBoundaryArrow when at end of line but next line exists', () => {
+        buffer = { lines: ['first', 'second'] };
+        const cursor = { line: 0, column: 5 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ rightArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('right');
+      });
+    });
+
+    describe('Up boundary', () => {
+      it('calls onBoundaryArrow("up") when cursor is on first line', () => {
+        buffer = { lines: ['hello'] };
+        const cursor = { line: 0, column: 2 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ upArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).toHaveBeenCalledWith('up');
+        expect(actions.moveCursor).not.toHaveBeenCalled();
+      });
+
+      it('does not call onBoundaryArrow when previous line exists', () => {
+        buffer = { lines: ['first', 'second'] };
+        const cursor = { line: 1, column: 2 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ upArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('up');
+      });
+
+      it('considers visual rows when width is provided - cursor on first visual row', () => {
+        // "hello world" with width 5 wraps to:
+        // "hello" (visual row 0)
+        // " worl" (visual row 1)
+        // "d" (visual row 2)
+        buffer = { lines: ['hello world'] };
+        const cursor = { line: 0, column: 2 }; // On first visual row
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ upArrow: true }, '', buffer, actions, cursor, undefined, 5);
+
+        expect(onBoundaryArrow).toHaveBeenCalledWith('up');
+        expect(actions.moveCursor).not.toHaveBeenCalled();
+      });
+
+      it('considers visual rows when width is provided - cursor on second visual row', () => {
+        // "hello world" with width 5 wraps to visual rows
+        buffer = { lines: ['hello world'] };
+        const cursor = { line: 0, column: 7 }; // On second visual row (after first wrap)
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ upArrow: true }, '', buffer, actions, cursor, undefined, 5);
+
+        // Can move up within the same buffer line (to previous visual row)
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('up');
+      });
+    });
+
+    describe('Down boundary', () => {
+      it('calls onBoundaryArrow("down") when cursor is on last line', () => {
+        buffer = { lines: ['hello'] };
+        const cursor = { line: 0, column: 2 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ downArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).toHaveBeenCalledWith('down');
+        expect(actions.moveCursor).not.toHaveBeenCalled();
+      });
+
+      it('does not call onBoundaryArrow when next line exists', () => {
+        buffer = { lines: ['first', 'second'] };
+        const cursor = { line: 0, column: 2 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ downArrow: true }, '', buffer, actions, cursor);
+
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('down');
+      });
+
+      it('considers visual rows when width is provided - cursor on last visual row', () => {
+        // "hello world" with width 5 wraps to visual rows
+        buffer = { lines: ['hello world'] };
+        const cursor = { line: 0, column: 10 }; // On last visual row (at 'd')
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ downArrow: true }, '', buffer, actions, cursor, undefined, 5);
+
+        expect(onBoundaryArrow).toHaveBeenCalledWith('down');
+        expect(actions.moveCursor).not.toHaveBeenCalled();
+      });
+
+      it('considers visual rows when width is provided - cursor on first visual row', () => {
+        // "hello world" with width 5 wraps to visual rows
+        buffer = { lines: ['hello world'] };
+        const cursor = { line: 0, column: 2 }; // On first visual row
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ downArrow: true }, '', buffer, actions, cursor, undefined, 5);
+
+        // Can move down within the same buffer line (to next visual row)
+        expect(onBoundaryArrow).not.toHaveBeenCalled();
+        expect(actions.moveCursor).toHaveBeenCalledWith('down');
+      });
+    });
+
+    describe('No callback provided', () => {
+      it('moves cursor normally when onBoundaryArrow is not set', () => {
+        buffer = { lines: ['hello'] };
+        const cursor = { line: 0, column: 0 };
+        // actions.onBoundaryArrow is not set
+
+        handleKey({ leftArrow: true }, '', buffer, actions, cursor);
+
+        expect(actions.moveCursor).toHaveBeenCalledWith('left');
+      });
+    });
+
+    describe('Empty buffer', () => {
+      it('calls onBoundaryArrow for all directions in empty buffer', () => {
+        buffer = { lines: [''] };
+        const cursor = { line: 0, column: 0 };
+        const onBoundaryArrow = vi.fn();
+        actions.onBoundaryArrow = onBoundaryArrow;
+
+        handleKey({ upArrow: true }, '', buffer, actions, cursor);
+        expect(onBoundaryArrow).toHaveBeenCalledWith('up');
+
+        onBoundaryArrow.mockClear();
+        handleKey({ downArrow: true }, '', buffer, actions, cursor);
+        expect(onBoundaryArrow).toHaveBeenCalledWith('down');
+
+        onBoundaryArrow.mockClear();
+        handleKey({ leftArrow: true }, '', buffer, actions, cursor);
+        expect(onBoundaryArrow).toHaveBeenCalledWith('left');
+
+        onBoundaryArrow.mockClear();
+        handleKey({ rightArrow: true }, '', buffer, actions, cursor);
+        expect(onBoundaryArrow).toHaveBeenCalledWith('right');
+      });
+    });
+  });
+
   describe('Editing', () => {
     it('handles Backspace', () => {
       handleKey({ backspace: true }, 'backspace', buffer, actions);

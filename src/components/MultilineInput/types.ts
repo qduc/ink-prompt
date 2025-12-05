@@ -22,6 +22,11 @@ export interface Buffer {
 export type Direction = 'up' | 'down' | 'left' | 'right' | 'lineStart' | 'lineEnd';
 
 /**
+ * Boundary arrow directions (subset of Direction used for boundary detection)
+ */
+export type BoundaryDirection = 'up' | 'down' | 'left' | 'right';
+
+/**
  * Result of wrapping buffer lines for visual display
  */
 export interface WrapResult {

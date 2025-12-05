@@ -1,9 +1,120 @@
 import { type Key, type Buffer, type Cursor, type Direction } from './types.js';
 import { type UseTextInputResult } from './useTextInput.js';
+import { getVisualRows } from './TextBuffer.js';
 import { log } from '../../utils/logger.js';
 
 export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor' | 'cursorOffset' | 'setCursorOffset'> {
   submit: () => void;
+  onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
+}
+
+/**
+ * Check if cursor is at the left boundary (start of text).
+ */
+function isAtLeftBoundary(cursor: Cursor): boolean {
+  return cursor.line === 0 && cursor.column === 0;
+}
+
+/**
+ * Check if cursor is at the right boundary (end of text).
+ */
+function isAtRightBoundary(buffer: Buffer, cursor: Cursor): boolean {
+  const lastLineIndex = buffer.lines.length - 1;
+  const lastLine = buffer.lines[lastLineIndex];
+  return cursor.line === lastLineIndex && cursor.column >= lastLine.length;
+}
+
+/**
+ * Check if cursor is at the top boundary (cannot move up).
+ * When width is provided, this considers visual line wrapping.
+ */
+function isAtTopBoundary(buffer: Buffer, cursor: Cursor, width?: number): boolean {
+  if (cursor.line > 0) {
+    // Not on first buffer line, check visual wrapping
+    if (width !== undefined) {
+      const currentLine = buffer.lines[cursor.line];
+      const rows = getVisualRows(currentLine, width);
+      // Find which visual row the cursor is on
+      let visualRow = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowEnd = row.start + row.length;
+        if (cursor.column >= row.start && cursor.column <= rowEnd) {
+          visualRow = i;
+          break;
+        }
+      }
+      // If cursor is not on the first visual row of this line, it can move up
+      return false;
+    }
+    return false;
+  }
+
+  // Cursor is on first buffer line
+  if (width !== undefined) {
+    const currentLine = buffer.lines[0];
+    const rows = getVisualRows(currentLine, width);
+    // Find which visual row the cursor is on
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowEnd = row.start + row.length;
+      if (cursor.column >= row.start && cursor.column <= rowEnd) {
+        // At top boundary only if on first visual row
+        return i === 0;
+      }
+    }
+  }
+
+  // No width - buffer line-based: first line means at top
+  return true;
+}
+
+/**
+ * Check if cursor is at the bottom boundary (cannot move down).
+ * When width is provided, this considers visual line wrapping.
+ */
+function isAtBottomBoundary(buffer: Buffer, cursor: Cursor, width?: number): boolean {
+  const lastLineIndex = buffer.lines.length - 1;
+
+  if (cursor.line < lastLineIndex) {
+    // Not on last buffer line, check visual wrapping
+    if (width !== undefined) {
+      const currentLine = buffer.lines[cursor.line];
+      const rows = getVisualRows(currentLine, width);
+      // Find which visual row the cursor is on
+      let visualRow = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowEnd = row.start + row.length;
+        if (cursor.column >= row.start && cursor.column <= rowEnd) {
+          visualRow = i;
+          break;
+        }
+      }
+      // If cursor is not on the last visual row of this line, it can move down
+      return false;
+    }
+    return false;
+  }
+
+  // Cursor is on last buffer line
+  if (width !== undefined) {
+    const currentLine = buffer.lines[lastLineIndex];
+    const rows = getVisualRows(currentLine, width);
+    const lastVisualRow = rows.length - 1;
+    // Find which visual row the cursor is on
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowEnd = row.start + row.length;
+      if (cursor.column >= row.start && cursor.column <= rowEnd) {
+        // At bottom boundary only if on last visual row
+        return i === lastVisualRow;
+      }
+    }
+  }
+
+  // No width - buffer line-based: last line means at bottom
+  return true;
 }
 
 /**
@@ -44,6 +155,7 @@ function isBackspaceSequence(seq?: string): boolean {
  * @param actions - The actions available to modify the state
  * @param cursor - The current cursor position (optional, but required for some logic like backslash check)
  * @param rawInput - The raw input sequence (optional, used for detecting Home/End keys)
+ * @param width - Terminal width for visual-aware boundary detection (optional)
  */
 export function handleKey(
   key: Partial<Key>,
@@ -51,22 +163,39 @@ export function handleKey(
   buffer: Buffer,
   actions: KeyHandlerActions,
   cursor?: Cursor,
-  rawInput?: string
+  rawInput?: string,
+  width?: number
 ): void {
-  // Navigation
+  // Navigation with boundary detection
   if (key.upArrow) {
+    if (cursor && actions.onBoundaryArrow && isAtTopBoundary(buffer, cursor, width)) {
+      actions.onBoundaryArrow('up');
+      return;
+    }
     actions.moveCursor('up');
     return;
   }
   if (key.downArrow) {
+    if (cursor && actions.onBoundaryArrow && isAtBottomBoundary(buffer, cursor, width)) {
+      actions.onBoundaryArrow('down');
+      return;
+    }
     actions.moveCursor('down');
     return;
   }
   if (key.leftArrow) {
+    if (cursor && actions.onBoundaryArrow && isAtLeftBoundary(cursor)) {
+      actions.onBoundaryArrow('left');
+      return;
+    }
     actions.moveCursor('left');
     return;
   }
   if (key.rightArrow) {
+    if (cursor && actions.onBoundaryArrow && isAtRightBoundary(buffer, cursor)) {
+      actions.onBoundaryArrow('right');
+      return;
+    }
     actions.moveCursor('right');
     return;
   }
