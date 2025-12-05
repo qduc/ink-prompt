@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useRef } from 'react';
-import { useInput, useStdout, useStdin, Box, Text } from 'ink';
+import { useInput, useStdin, Box, Text } from 'ink';
+import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
 import { useTextInput } from './useTextInput.js';
 import { handleKey, KeyHandlerActions } from './KeyHandler.js';
 import { TextRenderer } from './TextRenderer.js';
@@ -141,9 +142,8 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   cursorOverride,
 }) => {
 
-  // Get terminal width from Ink if not provided
-  const { stdout } = useStdout();
-  const terminalWidth = width ?? stdout?.columns ?? 80;
+  // Get terminal width from Ink (with resize support) if not provided
+  const terminalWidth = useTerminalWidth(width);
 
   // Track raw input for detecting Home/End keys
   const { stdin } = useStdin();

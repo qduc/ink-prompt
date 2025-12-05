@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { Buffer, Cursor, WrapResult } from './types.js';
+import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
 
 /**
  * Props for the TextRenderer component
@@ -25,44 +26,82 @@ export function wrapLines(buffer: Buffer, cursor: Cursor, width: number): WrapRe
   let cursorVisualRow = 0;
   let cursorVisualCol = 0;
 
+  // Ensure width is at least 1 to avoid infinite loops
+  const safeWidth = Math.max(1, width);
+
   let visualRowIndex = 0;
 
   for (let lineIndex = 0; lineIndex < buffer.lines.length; lineIndex++) {
     const line = buffer.lines[lineIndex];
     const isCursorLine = lineIndex === cursor.line;
 
-    if (line.length <= width) {
-      // Line fits, no wrapping needed
-      visualLines.push(line);
-
+    // Handle empty line case
+    if (line.length === 0) {
+      visualLines.push('');
       if (isCursorLine) {
         cursorVisualRow = visualRowIndex;
-        cursorVisualCol = cursor.column;
+        cursorVisualCol = 0;
       }
-
       visualRowIndex++;
-    } else {
-      // Line needs to be wrapped
-      let offset = 0;
-      while (offset < line.length) {
-        const chunk = line.slice(offset, offset + width);
-        visualLines.push(chunk);
+      continue;
+    }
 
-        if (isCursorLine) {
-          // Check if cursor falls within this chunk
-          if (cursor.column >= offset && cursor.column < offset + width) {
-            cursorVisualRow = visualRowIndex;
-            cursorVisualCol = cursor.column - offset;
-          } else if (cursor.column === line.length && offset + chunk.length === line.length) {
-            // Cursor at end of line
-            cursorVisualRow = visualRowIndex;
-            cursorVisualCol = chunk.length;
+    let remaining = line;
+    let offset = 0;
+
+    while (remaining.length > 0) {
+      let chunkLength = safeWidth;
+
+      if (remaining.length <= safeWidth) {
+        chunkLength = remaining.length;
+      } else {
+        // Find split point (last space within width)
+        let splitIndex = -1;
+        for (let i = safeWidth - 1; i >= 0; i--) {
+          if (remaining[i] === ' ') {
+            splitIndex = i;
+            break;
           }
         }
 
-        offset += width;
-        visualRowIndex++;
+        if (splitIndex !== -1) {
+          // Include the space in the chunk
+          chunkLength = splitIndex + 1;
+        }
       }
+
+      const chunk = remaining.slice(0, chunkLength);
+      visualLines.push(chunk);
+
+      if (isCursorLine) {
+      // Check if cursor falls within this chunk
+        // Cursor is at `cursor.column` (relative to line start)
+        // Current chunk covers `offset` to `offset + chunkLength`
+        if (cursor.column >= offset && cursor.column < offset + chunkLength) {
+          cursorVisualRow = visualRowIndex;
+          cursorVisualCol = cursor.column - offset;
+        } else if (cursor.column === offset + chunkLength) {
+          // Cursor is at the end of this chunk
+          if (offset + chunkLength === line.length) {
+          // End of line
+            cursorVisualRow = visualRowIndex;
+            cursorVisualCol = chunkLength;
+          } else {
+            // Wrap point - cursor should be at start of next line
+            // We'll let the next iteration handle it (it will be index 0 of next chunk)
+            // But wait, if we are at the wrap point, the next iteration will see:
+            // offset = oldOffset + chunkLength.
+            // cursor.column == offset.
+            // So it enters the first `if` block: cursor.column >= offset.
+            // cursorVisualCol = cursor.column - offset = 0.
+            // This is correct.
+          }
+        }
+      }
+
+      remaining = remaining.slice(chunkLength);
+      offset += chunkLength;
+      visualRowIndex++;
     }
   }
 
@@ -109,9 +148,10 @@ function renderLineWithCursor(
 export function TextRenderer({
   buffer,
   cursor,
-  width = 80,
+  width: propWidth,
   showCursor = true,
 }: TextRendererProps): React.ReactElement {
+  const width = useTerminalWidth(propWidth);
   const { visualLines, cursorVisualRow, cursorVisualCol } = wrapLines(buffer, cursor, width);
 
   return (

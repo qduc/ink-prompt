@@ -162,60 +162,136 @@ export function insertNewLine(
 }
 
 /**
+ * Information about a visual row within a wrapped line.
+ */
+interface VisualRowInfo {
+  /** Starting offset in the buffer line */
+  start: number;
+  /** Length of this visual row */
+  length: number;
+}
+
+/**
+ * Break a line into visual rows using word-aware wrapping.
+ * Words are kept intact when possible, breaking at spaces.
+ * Long words that exceed width are hard-wrapped.
+ */
+export function getVisualRows(line: string, width: number): VisualRowInfo[] {
+  const safeWidth = Math.max(1, width);
+  const rows: VisualRowInfo[] = [];
+
+  if (line.length === 0) {
+    return [{ start: 0, length: 0 }];
+  }
+
+  let offset = 0;
+  let remaining = line;
+
+  while (remaining.length > 0) {
+    let chunkLength = safeWidth;
+
+    if (remaining.length <= safeWidth) {
+      chunkLength = remaining.length;
+    } else {
+      // Find split point (last space within width)
+      let splitIndex = -1;
+      for (let i = safeWidth - 1; i >= 0; i--) {
+        if (remaining[i] === ' ') {
+          splitIndex = i;
+          break;
+        }
+      }
+
+      if (splitIndex !== -1) {
+        // Include the space in the chunk
+        chunkLength = splitIndex + 1;
+      }
+    }
+
+    rows.push({ start: offset, length: chunkLength });
+    remaining = remaining.slice(chunkLength);
+    offset += chunkLength;
+  }
+
+  return rows;
+}
+
+/**
  * Calculate which visual row (within a buffer line) the cursor is on,
  * and the column within that visual row.
+ * Uses word-aware wrapping.
  */
 function getVisualPosition(
   bufferColumn: number,
-  lineLength: number,
+  line: string,
   width: number
 ): { visualRow: number; visualCol: number } {
-  if (lineLength <= width) {
-    return { visualRow: 0, visualCol: bufferColumn };
+  const rows = getVisualRows(line, width);
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowEnd = row.start + row.length;
+
+    if (bufferColumn >= row.start && bufferColumn < rowEnd) {
+      return { visualRow: i, visualCol: bufferColumn - row.start };
+    }
+    // Handle cursor at the very end of this row
+    if (bufferColumn === rowEnd && i === rows.length - 1) {
+      return { visualRow: i, visualCol: row.length };
+    }
   }
-  const visualRow = Math.floor(bufferColumn / width);
-  const visualCol = bufferColumn % width;
-  return { visualRow, visualCol };
+
+  // Cursor at wrap point - belongs to the next row
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (bufferColumn === row.start + row.length && i < rows.length - 1) {
+      return { visualRow: i + 1, visualCol: 0 };
+    }
+  }
+
+  // Fallback: cursor at end of line
+  const lastRow = rows[rows.length - 1];
+  return { visualRow: rows.length - 1, visualCol: lastRow.length };
 }
 
 /**
  * Calculate how many visual rows a buffer line takes.
+ * Uses word-aware wrapping.
  */
-function getVisualRowCount(lineLength: number, width: number): number {
-  if (lineLength === 0) return 1;
-  return Math.ceil(lineLength / width);
+function getVisualRowCount(line: string, width: number): number {
+  return getVisualRows(line, width).length;
 }
 
 /**
  * Convert visual position back to buffer column.
+ * Uses word-aware wrapping.
  */
 function visualToBufferColumn(
   visualRow: number,
   visualCol: number,
-  lineLength: number,
+  line: string,
   width: number
 ): number {
-  const bufferColumn = visualRow * width + visualCol;
-  return Math.min(bufferColumn, lineLength);
+  const rows = getVisualRows(line, width);
+  if (visualRow >= rows.length) {
+    return line.length;
+  }
+  const row = rows[visualRow];
+  return Math.min(row.start + visualCol, line.length);
 }
 
 /**
  * Get the length of a specific visual row within a buffer line.
+ * Uses word-aware wrapping.
  */
 function getVisualRowLength(
-  lineLength: number,
+  line: string,
   visualRow: number,
   width: number
 ): number {
-  const totalVisualRows = getVisualRowCount(lineLength, width);
-  if (visualRow >= totalVisualRows) return 0;
-
-  if (visualRow === totalVisualRows - 1) {
-    // Last visual row - might be shorter
-    const remaining = lineLength - visualRow * width;
-    return remaining;
-  }
-  return width;
+  const rows = getVisualRows(line, width);
+  if (visualRow >= rows.length) return 0;
+  return rows[visualRow].length;
 }
 
 /**
@@ -256,25 +332,25 @@ export function moveCursor(
 
     case 'up':
       if (width !== undefined) {
-        // Visual-aware movement
-        const { visualRow, visualCol } = getVisualPosition(column, currentLine.length, width);
+        // Visual-aware movement (word-aware wrapping)
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width);
 
         if (visualRow > 0) {
           // Move to previous visual row within the same buffer line
           const targetVisualRow = visualRow - 1;
-          const targetVisualRowLength = getVisualRowLength(currentLine.length, targetVisualRow, width);
+          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine.length, width) };
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width) };
         }
 
         // At first visual row of current line - move to last visual row of previous buffer line
         if (line > 0) {
           const prevLine = buffer.lines[line - 1];
-          const prevLineVisualRows = getVisualRowCount(prevLine.length, width);
+          const prevLineVisualRows = getVisualRowCount(prevLine, width);
           const targetVisualRow = prevLineVisualRows - 1;
-          const targetVisualRowLength = getVisualRowLength(prevLine.length, targetVisualRow, width);
+          const targetVisualRowLength = getVisualRowLength(prevLine, targetVisualRow, width);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line: line - 1, column: visualToBufferColumn(targetVisualRow, targetVisualCol, prevLine.length, width) };
+          return { line: line - 1, column: visualToBufferColumn(targetVisualRow, targetVisualCol, prevLine, width) };
         }
 
         return cursor;
@@ -289,22 +365,22 @@ export function moveCursor(
 
     case 'down':
       if (width !== undefined) {
-        // Visual-aware movement
-        const { visualRow, visualCol } = getVisualPosition(column, currentLine.length, width);
-        const currentLineVisualRows = getVisualRowCount(currentLine.length, width);
+        // Visual-aware movement (word-aware wrapping)
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width);
+        const currentLineVisualRows = getVisualRowCount(currentLine, width);
 
         if (visualRow < currentLineVisualRows - 1) {
           // Move to next visual row within the same buffer line
           const targetVisualRow = visualRow + 1;
-          const targetVisualRowLength = getVisualRowLength(currentLine.length, targetVisualRow, width);
+          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine.length, width) };
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width) };
         }
 
         // At last visual row of current line - move to first visual row of next buffer line
         if (line < lineCount - 1) {
           const nextLine = buffer.lines[line + 1];
-          const targetVisualRowLength = getVisualRowLength(nextLine.length, 0, width);
+          const targetVisualRowLength = getVisualRowLength(nextLine, 0, width);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
           return { line: line + 1, column: Math.min(targetVisualCol, nextLine.length) };
         }
