@@ -27,6 +27,15 @@ const END_SEQUENCES = [
 ];
 
 /**
+ * Raw sequences that represent backspace. Some terminals send DEL (0x7f) while others send BS (0x08).
+ */
+const BACKSPACE_SEQUENCES = ['\u0008', '\u007f'];
+
+function isBackspaceSequence(seq?: string): boolean {
+  return !!seq && BACKSPACE_SEQUENCES.includes(seq);
+}
+
+/**
  * Handles keyboard input and maps it to text input actions.
  *
  * @param key - The Ink key object
@@ -102,7 +111,10 @@ export function handleKey(
   }
 
   // Editing
-  if (key.backspace) {
+  const rawBackspace = isBackspaceSequence(rawInput);
+  const inputBackspace = isBackspaceSequence(input);
+
+  if (key.backspace || rawBackspace || inputBackspace || (key.delete && rawBackspace)) {
     actions.delete();
     return;
   }
