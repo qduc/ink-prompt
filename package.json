@@ -1,6 +1,6 @@
 {
   "name": "ink-prompt",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A React Ink component for prompts",
   "type": "module",
   "main": "./dist/index.js",
