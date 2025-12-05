@@ -11,9 +11,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
-        ink-version: ['4.4.1', '5.2.1', '6.5.1']
-        react-version: ['18.2.0', '18.3.1', '19.0.0']
+        node-version: [ 18, 20, 22 ]
+        ink-version: [ '4.4.1', '5.2.1', '6.5.1' ]
+        react-version: [ '18.2.0', '18.3.1', '19.0.0' ]
         exclude:
           # Ink 6 requires React 19
           - ink-version: '6.5.1'
@@ -54,6 +54,10 @@ jobs:
           npm install --save-dev ink@${{ matrix.ink-version }} react@${{ matrix.react-version }}
           # Also install react-dom to match react version
           if [ "${{ matrix.react-version }}" = "19.0.0" ]; then
+            npm install --save-dev react-dom@19.0.0
+          else
+            npm install --save-dev react-dom@${{ matrix.react-version }}
+          fi
 
       - name: Run type check
         run: npm run type-check
