@@ -25,6 +25,10 @@ jobs:
             react-version: '19.2.1'
           - ink-version: '5.2.1'
             react-version: '19.2.1'
+          # Ink 16, React 19 doesn't work with Node 18
+          - node-version: '18'
+            ink-version: '6.5.1'
+            react-version: '19.2.1'
 
     name: Node ${{ matrix.node-version }} / Ink ${{ matrix.ink-version }} / React ${{ matrix.react-version }}
 
