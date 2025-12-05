@@ -26,6 +26,14 @@ export interface MultilineInputProps {
   onCursorChange?: (offset: number) => void;
   /** Optional external cursor override (flat index) */
   cursorOverride?: number;
+  /**
+   * Called when an arrow key is pressed but cursor is at a boundary.
+   * - 'up': cursor is on the first/topmost line
+   * - 'down': cursor is on the last/bottommost line
+   * - 'left': cursor is at position 0 (start of text)
+   * - 'right': cursor is at end of text (after last character)
+   */
+  onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
 }
 
 /**
@@ -140,6 +148,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   isActive = true,
   onCursorChange,
   cursorOverride,
+  onBoundaryArrow,
 }) => {
 
   // Get terminal width from Ink (with resize support) if not provided
@@ -229,12 +238,13 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     redo: textInput.redo,
     setText: textInput.setText,
     submit: handleSubmit,
+    onBoundaryArrow,
   };
 
   // Handle keyboard input
   useInput((input: string, key: any) => {
     log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
-    handleKey(key, input, buffer, actions, textInput.cursor, lastRawInput.current);
+    handleKey(key, input, buffer, actions, textInput.cursor, lastRawInput.current, terminalWidth);
   }, { isActive });
 
   // Show placeholder if empty and no cursor shown
