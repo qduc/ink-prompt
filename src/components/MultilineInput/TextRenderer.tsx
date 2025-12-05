@@ -78,7 +78,13 @@ function renderLineWithCursor(
   showCursor: boolean
 ): React.ReactNode {
   if (!showCursor) {
-    return <Text>{line}</Text>;
+    // Empty lines need a space to be rendered by Ink
+    return <Text>{line || ' '}</Text>;
+  }
+
+  // For empty lines with cursor, we need special handling
+  if (line.length === 0) {
+    return <Text inverse> </Text>;
   }
 
   const before = line.slice(0, cursorCol);
@@ -119,7 +125,7 @@ export function TextRenderer({
               // renderLineWithCursor returns a ReactNode composed of Text
               renderLineWithCursor(line, cursorVisualCol, showCursor)
             ) : (
-              <Text>{line}</Text>
+              <Text>{line || ' '}</Text>
             )}
           </Box>
         );

@@ -168,6 +168,18 @@ describe('TextRenderer', () => {
       // Should render cursor as a space in empty buffer
       expect(container.textContent).toContain(' ');
     });
+
+    it('renders empty lines between content', () => {
+      const buffer: Buffer = { lines: ['first line', '', 'second line'] };
+      const cursor: Cursor = { line: 0, column: 0 };
+
+      const { container } = render(
+        <TextRenderer buffer={buffer} cursor={cursor} showCursor={false} />
+      );
+
+      // Should preserve empty line structure
+      expect(container.textContent).toBe('first line second line');
+    });
   });
 
   describe('cursor display', () => {
