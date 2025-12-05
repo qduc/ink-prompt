@@ -7,6 +7,7 @@ import {
   insertNewLine,
   moveCursor,
   getTextContent,
+  getVisualRows,
 } from '../TextBuffer.js';
 import type { Buffer, Cursor } from '../types.js';
 
@@ -518,6 +519,145 @@ describe('TextBuffer', () => {
     it('preserves empty lines', () => {
       const buffer = createBuffer('hello\n\nworld');
       expect(getTextContent(buffer)).toBe('hello\n\nworld');
+    });
+  });
+
+  describe('getVisualRows (word-aware wrapping)', () => {
+    it('returns single row for short line', () => {
+      const rows = getVisualRows('hello', 10);
+      expect(rows).toEqual([{ start: 0, length: 5 }]);
+    });
+
+    it('returns single row for empty line', () => {
+      const rows = getVisualRows('', 10);
+      expect(rows).toEqual([{ start: 0, length: 0 }]);
+    });
+
+    it('wraps at space boundary', () => {
+      const rows = getVisualRows('hello world', 7);
+      // "hello " (6) fits, "world" (5) on next row
+      expect(rows).toEqual([
+        { start: 0, length: 6 },  // "hello "
+        { start: 6, length: 5 },  // "world"
+      ]);
+    });
+
+    it('hard-wraps long words that exceed width', () => {
+      const rows = getVisualRows('supercalifragilistic', 5);
+      expect(rows).toEqual([
+        { start: 0, length: 5 },   // "super"
+        { start: 5, length: 5 },   // "calif"
+        { start: 10, length: 5 },  // "ragil"
+        { start: 15, length: 5 },  // "istic"
+      ]);
+    });
+
+    it('wraps mixed content correctly', () => {
+      const rows = getVisualRows('a very longwordthatwraps', 10);
+      expect(rows).toEqual([
+        { start: 0, length: 7 },   // "a very "
+        { start: 7, length: 10 },  // "longwordth"
+        { start: 17, length: 7 },  // "atwraps"
+      ]);
+    });
+
+    it('handles multiple spaces', () => {
+      const rows = getVisualRows('hello   world', 8);
+      // "hello   " (8) fits exactly
+      expect(rows).toEqual([
+        { start: 0, length: 8 },  // "hello   "
+        { start: 8, length: 5 },  // "world"
+      ]);
+    });
+
+    it('handles leading space', () => {
+      const rows = getVisualRows(' hello world', 7);
+      // " hello " (7) fits exactly
+      expect(rows).toEqual([
+        { start: 0, length: 7 },  // " hello "
+        { start: 7, length: 5 },  // "world"
+      ]);
+    });
+  });
+
+  describe('moveCursor with word-aware wrapping', () => {
+    describe('up/down in word-wrapped lines', () => {
+      it('moves up within word-wrapped line respecting word boundaries', () => {
+        // "hello world" with width 7 wraps as ["hello ", "world"]
+        const buffer = createBuffer('hello world');
+        const cursor: Cursor = { line: 0, column: 8 }; // at 'r' in 'world'
+        const result = moveCursor(buffer, cursor, 'up', 7);
+        // Visual row 1, col 2 -> visual row 0
+        // Visual row 0 is "hello " (6 chars), col 2 is 'l'
+        expect(result).toEqual({ line: 0, column: 2 });
+      });
+
+      it('moves down within word-wrapped line respecting word boundaries', () => {
+        // "hello world" with width 7 wraps as ["hello ", "world"]
+        const buffer = createBuffer('hello world');
+        const cursor: Cursor = { line: 0, column: 2 }; // at first 'l' in 'hello'
+        const result = moveCursor(buffer, cursor, 'down', 7);
+        // Visual row 0, col 2 -> visual row 1, col 2
+        // Visual row 1 starts at offset 6, so target = 6 + 2 = 8
+        expect(result).toEqual({ line: 0, column: 8 });
+      });
+
+      it('clamps column when moving to shorter word-wrapped row', () => {
+        // "hello world" width 7: ["hello ", "world"] (row 0: 6 chars, row 1: 5 chars)
+        const buffer = createBuffer('hello world');
+        const cursor: Cursor = { line: 0, column: 5 }; // at the space after 'hello'
+        const result = moveCursor(buffer, cursor, 'down', 7);
+        // Visual row 0, col 5 -> visual row 1, but row 1 only has 5 chars
+        // So col should clamp to 5 (end of "world")
+        // Target = 6 + 5 = 11 = line length
+        expect(result).toEqual({ line: 0, column: 11 });
+      });
+
+      it('moves between buffer lines with word-wrapping', () => {
+        // Line 0: "hello world" wraps as ["hello ", "world"]
+        // Line 1: "test"
+        const buffer = createBuffer('hello world\ntest');
+        const cursor: Cursor = { line: 0, column: 8 }; // 'r' in 'world'
+        const result = moveCursor(buffer, cursor, 'down', 7);
+        // From visual row 1 (bottom of line 0) to line 1, visual row 0
+        // "test" row 0 is 4 chars, col 2 requested, result = col 2
+        expect(result).toEqual({ line: 1, column: 2 });
+      });
+
+      it('handles cursor at word wrap boundary going up', () => {
+        // "hello world" width 7: ["hello ", "world"]
+        // Cursor at position 6 (start of "world")
+        const buffer = createBuffer('hello world');
+        const cursor: Cursor = { line: 0, column: 6 };
+        const result = moveCursor(buffer, cursor, 'up', 7);
+        // Should go from visual row 1, col 0 to visual row 0, col 0
+        expect(result).toEqual({ line: 0, column: 0 });
+      });
+    });
+
+    describe('cursor position calculation at word boundaries', () => {
+      it('cursor in middle of first word-wrapped row', () => {
+        // "a very longword" width 10: ["a very ", "longword"]
+        const buffer = createBuffer('a very longword');
+        const cursor: Cursor = { line: 0, column: 3 }; // at 'e' in 'very'
+        const result = moveCursor(buffer, cursor, 'down', 10);
+        // From row 0, col 3 to row 1, col 3 -> offset 7 + 3 = 10
+        expect(result).toEqual({ line: 0, column: 10 });
+      });
+
+      it('preserves column when navigating up then down', () => {
+        // "hello world test" width 7: ["hello ", "world ", "test"]
+        const buffer = createBuffer('hello world test');
+        const cursor: Cursor = { line: 0, column: 9 }; // 'r' in 'world'
+
+        // Move up
+        const afterUp = moveCursor(buffer, cursor, 'up', 7);
+        expect(afterUp).toEqual({ line: 0, column: 3 });
+
+        // Move back down
+        const afterDown = moveCursor(buffer, afterUp, 'down', 7);
+        expect(afterDown).toEqual({ line: 0, column: 9 });
+      });
     });
   });
 });

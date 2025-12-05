@@ -37,11 +37,23 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
   - Components export both the component and their prop types
 - `src/index.ts` - Main entry point that re-exports all public APIs
 
+**Hooks:**
+- `src/hooks/` - Reusable React hooks for Ink components
+  - `useTerminalWidth.ts` - Hook that provides terminal width with resize event handling
+    - Returns `propWidth` if provided, otherwise returns terminal width from stdout
+    - Automatically updates on terminal resize events
+    - Properly cleans up event listeners on unmount
+
 **Utilities:**
 - `src/utils/logger.ts` - File-based debug logger
   - `log(message)` - Writes timestamped debug messages to a log file
   - `initLogger()` - Clears any existing log file (call once at app start)
   - Log file location: `$INK_PROMPT_LOG_FILE` env var or `./ink-prompt.debug.log`
+
+**Text Wrapping:**
+- Word-aware wrapping: Text wraps at word boundaries (spaces) when possible
+- Long words that exceed the terminal width are hard-wrapped
+- Both rendering (`wrapLines` in TextRenderer) and cursor navigation (`moveCursor` in TextBuffer) use consistent word-aware wrapping logic
 
 **Build System:**
 - TypeScript compiles from `src/` to `dist/`
