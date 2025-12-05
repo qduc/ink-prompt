@@ -137,7 +137,8 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   // Create submit handler
   const handleSubmit = useCallback(() => {
     onSubmit?.(textInput.value);
-  }, [onSubmit, textInput.value]);
+    textInput.setText(''); // Clear input after submit
+  }, [onSubmit, textInput.value, textInput.setText]);
 
   // Create actions for KeyHandler
   const actions: KeyHandlerActions = {

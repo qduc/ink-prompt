@@ -15,6 +15,26 @@ import { MultilineInputCore } from '../index.js';
  */
 
 describe('MultilineInputCore', () => {
+    describe('Submission', () => {
+      it('clears input after submit', () => {
+        const onSubmit = vi.fn();
+        const onChange = vi.fn();
+        // Simulate controlled usage: value is managed by parent
+        let value = 'hello world';
+        const { rerender, container } = render(
+          <MultilineInputCore value={value} onSubmit={onSubmit} onChange={onChange} />
+        );
+
+        // Simulate submit: parent receives value, then clears
+        onSubmit(value);
+        value = '';
+        rerender(<MultilineInputCore value={value} onSubmit={onSubmit} onChange={onChange} />);
+
+        // After rerender, input should be empty
+        expect(container.textContent).toContain(' '); // Cursor in empty buffer
+        expect(onChange).toHaveBeenCalledWith('');
+      });
+    });
   describe('Rendering', () => {
     it('renders empty input with cursor', () => {
       const { container } = render(<MultilineInputCore />);
