@@ -41,8 +41,10 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - `src/hooks/` - Reusable React hooks for Ink components
   - `useTerminalWidth.ts` - Hook that provides terminal width with resize event handling
     - Returns `propWidth` if provided, otherwise returns terminal width from stdout
-    - Automatically updates on terminal resize events
-    - Properly cleans up event listeners on unmount
+    - Automatically updates on terminal resize events with debouncing (default: 100ms)
+    - Debounce prevents excessive re-renders during rapid terminal resizing (e.g., when user drags window)
+    - Debounce delay is configurable via optional second parameter: `useTerminalWidth(width?, debounceMs?)`
+    - Properly cleans up event listeners and pending debounce timers on unmount
 
 **Utilities:**
 - `src/utils/logger.ts` - File-based debug logger
