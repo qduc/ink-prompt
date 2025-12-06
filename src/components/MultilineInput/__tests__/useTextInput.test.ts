@@ -217,4 +217,178 @@ describe('useTextInput', () => {
       expect(result.current.cursor).toEqual({ line: 0, column: 5 });
     });
   });
+
+  describe('history limit', () => {
+    it('should use default history limit of 100', () => {
+      const { result } = renderHook(() => useTextInput());
+
+      // Insert 5 characters separately
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          result.current.insert('a');
+        });
+      }
+
+      expect(result.current.value).toBe('aaaaa');
+
+      // Undo 5 times
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          result.current.undo();
+        });
+      }
+
+      // Should be back to empty
+      expect(result.current.value).toBe('');
+
+      // Try to undo again - should have no effect
+      const valueBefore = result.current.value;
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.value).toBe(valueBefore);
+    });
+
+    it('should respect custom history limit', () => {
+      const { result } = renderHook(() => useTextInput({ historyLimit: 3 }));
+
+      // Insert 5 characters
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          result.current.insert('a');
+        });
+      }
+
+      expect(result.current.value).toBe('aaaaa');
+
+      // Undo 4 times - only 3 should work due to limit
+      for (let i = 0; i < 4; i++) {
+        act(() => {
+          result.current.undo();
+        });
+      }
+
+      // Should be back to 2 characters (5 - 3 undos, since only 3 history entries)
+      expect(result.current.value).toBe('aa');
+
+      // Try to undo again - should have no effect
+      const valueBefore = result.current.value;
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.value).toBe(valueBefore);
+    });
+
+    it('should trim oldest history when limit exceeded', () => {
+      const { result } = renderHook(() => useTextInput({ historyLimit: 3 }));
+
+      // Insert 5 characters
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          result.current.insert('a');
+        });
+      }
+
+      expect(result.current.value).toBe('aaaaa');
+
+      // Can undo 3 times (limited by history)
+      for (let i = 0; i < 3; i++) {
+        act(() => {
+          result.current.undo();
+        });
+      }
+
+      // Should be at 2 characters
+      expect(result.current.value).toBe('aa');
+
+      // Try to undo one more time - should have no effect (no more history)
+      const valueBefore = result.current.value;
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.value).toBe(valueBefore);
+    });
+
+    it('should clear redo stack when new edit happens', () => {
+      const { result } = renderHook(() => useTextInput({ historyLimit: 5 }));
+
+      act(() => {
+        result.current.insert('a');
+      });
+      act(() => {
+        result.current.insert('b');
+      });
+      act(() => {
+        result.current.insert('c');
+      });
+
+      expect(result.current.value).toBe('abc');
+
+      // Undo once
+      act(() => {
+        result.current.undo();
+      });
+
+      expect(result.current.value).toBe('ab');
+
+      // Redo should work
+      act(() => {
+        result.current.redo();
+      });
+
+      expect(result.current.value).toBe('abc');
+
+      // Undo again
+      act(() => {
+        result.current.undo();
+      });
+
+      expect(result.current.value).toBe('ab');
+
+      // Insert new character - redo stack should be cleared
+      act(() => {
+        result.current.insert('d');
+      });
+
+      expect(result.current.value).toBe('abd');
+
+      // Redo should not work now (redo stack was cleared on insert)
+      const valueBefore = result.current.value;
+      act(() => {
+        result.current.redo();
+      });
+
+      expect(result.current.value).toBe(valueBefore);
+    });
+
+    it('should prevent excessive memory use with bounded history', () => {
+      const { result } = renderHook(() => useTextInput({ historyLimit: 10 }));
+
+      // Insert 30 characters
+      for (let i = 0; i < 30; i++) {
+        act(() => {
+          result.current.insert('x');
+        });
+      }
+
+      expect(result.current.value).toBe('x'.repeat(30));
+
+      // We should only be able to undo 10 times due to history limit
+      for (let i = 0; i < 10; i++) {
+        act(() => {
+          result.current.undo();
+        });
+      }
+
+      // Should be back to 20 characters (30 - 10 undos)
+      expect(result.current.value).toBe('x'.repeat(20));
+
+      // No more undos available
+      const valueBefore = result.current.value;
+      act(() => {
+        result.current.undo();
+      });
+      expect(result.current.value).toBe(valueBefore);
+    });
+  });
 });
