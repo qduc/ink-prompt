@@ -55,6 +55,13 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - Long words that exceed the terminal width are hard-wrapped
 - Both rendering (`wrapLines` in TextRenderer) and cursor navigation (`moveCursor` in TextBuffer) use consistent word-aware wrapping logic
 
+**Undo/Redo History Management:**
+- `useTextInput` hook maintains undo/redo stacks for text edits
+- History is bounded by `historyLimit` option (default: 100 entries) to prevent unbounded memory growth
+- When undo stack exceeds the limit, oldest entries are discarded
+- Each history entry stores a full snapshot of the buffer and cursor state
+- Redo stack is cleared whenever a new edit occurs
+
 **Build System:**
 - TypeScript compiles from `src/` to `dist/`
 - Outputs CommonJS modules (`.js`) with type definitions (`.d.ts`)

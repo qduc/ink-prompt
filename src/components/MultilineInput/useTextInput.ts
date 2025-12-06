@@ -17,6 +17,8 @@ export interface UseTextInputProps {
   initialValue?: string;
   /** Terminal width for visual-aware cursor navigation (up/down arrows respect line wrapping) */
   width?: number;
+  /** Maximum number of history entries to keep (default: 100) */
+  historyLimit?: number;
 }
 
 export interface UseTextInputResult {
@@ -40,7 +42,7 @@ interface HistoryState {
   cursor: Cursor;
 }
 
-export function useTextInput({ initialValue = '', width }: UseTextInputProps = {}): UseTextInputResult {
+export function useTextInput({ initialValue = '', width, historyLimit = 100 }: UseTextInputProps = {}): UseTextInputResult {
   const [buffer, setBuffer] = useState<Buffer>(() => createBuffer(initialValue));
   const [cursor, setCursor] = useState<Cursor>(() => {
     const lines = initialValue.split('\n');
@@ -54,9 +56,16 @@ export function useTextInput({ initialValue = '', width }: UseTextInputProps = {
   const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
 
   const pushToHistory = useCallback((currentBuffer: Buffer, currentCursor: Cursor) => {
-    setUndoStack((prev) => [...prev, { buffer: currentBuffer, cursor: currentCursor }]);
+    setUndoStack((prev) => {
+      const newStack = [...prev, { buffer: currentBuffer, cursor: currentCursor }];
+      // Trim stack if it exceeds history limit
+      if (newStack.length > historyLimit) {
+        return newStack.slice(-historyLimit);
+      }
+      return newStack;
+    });
     setRedoStack([]);
-  }, []);
+  }, [historyLimit]);
 
   const insert = useCallback(
     (char: string) => {
