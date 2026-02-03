@@ -63,6 +63,7 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - When undo stack exceeds the limit, oldest entries are discarded
 - Each history entry stores a full snapshot of the buffer and cursor state
 - Redo stack is cleared whenever a new edit occurs
+- Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
 
 **Build System:**
 - TypeScript compiles from `src/` to `dist/`

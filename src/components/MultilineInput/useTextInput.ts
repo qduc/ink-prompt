@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   createBuffer,
   insertText as bufferInsertText,
@@ -19,6 +19,11 @@ export interface UseTextInputProps {
   width?: number;
   /** Maximum number of history entries to keep (default: 100) */
   historyLimit?: number;
+  /**
+   * When > 0, consecutive single-character inserts are batched into a single undo step.
+   * A batch is committed after this many milliseconds of inactivity (default: 200).
+   */
+  undoDebounceMs?: number;
 }
 
 export interface UseTextInputResult {
@@ -42,7 +47,12 @@ interface HistoryState {
   cursor: Cursor;
 }
 
-export function useTextInput({ initialValue = '', width, historyLimit = 100 }: UseTextInputProps = {}): UseTextInputResult {
+export function useTextInput({
+  initialValue = '',
+  width,
+  historyLimit = 100,
+  undoDebounceMs = 200,
+}: UseTextInputProps = {}): UseTextInputResult {
   const [buffer, setBuffer] = useState<Buffer>(() => createBuffer(initialValue));
   const [cursor, setCursor] = useState<Cursor>(() => {
     const lines = initialValue.split('\n');
@@ -55,17 +65,69 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100 }: U
   const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
 
-  const pushToHistory = useCallback((currentBuffer: Buffer, currentCursor: Cursor) => {
+  const pendingInsertBatchRef = useRef<{
+    startState?: HistoryState;
+    timerId?: ReturnType<typeof setTimeout>;
+  }>({});
+
+  const clearPendingInsertTimer = useCallback(() => {
+    if (pendingInsertBatchRef.current.timerId) {
+      clearTimeout(pendingInsertBatchRef.current.timerId);
+      pendingInsertBatchRef.current.timerId = undefined;
+    }
+  }, []);
+
+  const appendUndoState = useCallback((state: HistoryState) => {
     setUndoStack((prev) => {
-      const newStack = [...prev, { buffer: currentBuffer, cursor: currentCursor }];
-      // Trim stack if it exceeds history limit
+      const newStack = [...prev, state];
       if (newStack.length > historyLimit) {
         return newStack.slice(-historyLimit);
       }
       return newStack;
     });
-    setRedoStack([]);
   }, [historyLimit]);
+
+  const commitPendingInsertBatch = useCallback(() => {
+    const startState = pendingInsertBatchRef.current.startState;
+    if (!startState) return;
+
+    clearPendingInsertTimer();
+    pendingInsertBatchRef.current.startState = undefined;
+    appendUndoState(startState);
+  }, [appendUndoState, clearPendingInsertTimer]);
+
+  const schedulePendingInsertCommit = useCallback(() => {
+    if (undoDebounceMs <= 0) return;
+
+    clearPendingInsertTimer();
+    pendingInsertBatchRef.current.timerId = setTimeout(() => {
+      commitPendingInsertBatch();
+    }, undoDebounceMs);
+  }, [clearPendingInsertTimer, commitPendingInsertBatch, undoDebounceMs]);
+
+  const beginOrRefreshInsertBatch = useCallback((currentBuffer: Buffer, currentCursor: Cursor) => {
+    if (!pendingInsertBatchRef.current.startState) {
+      pendingInsertBatchRef.current.startState = { buffer: currentBuffer, cursor: currentCursor };
+      setRedoStack([]);
+    }
+    schedulePendingInsertCommit();
+  }, [schedulePendingInsertCommit]);
+
+  const flushPendingInsertBatch = useCallback(() => {
+    commitPendingInsertBatch();
+  }, [commitPendingInsertBatch]);
+
+  const pushToHistory = useCallback((currentBuffer: Buffer, currentCursor: Cursor) => {
+    appendUndoState({ buffer: currentBuffer, cursor: currentCursor });
+    setRedoStack([]);
+  }, [appendUndoState]);
+
+  useEffect(() => {
+    return () => {
+      clearPendingInsertTimer();
+      pendingInsertBatchRef.current.startState = undefined;
+    };
+  }, [clearPendingInsertTimer]);
 
   const insert = useCallback(
     (char: string) => {
@@ -74,38 +136,52 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100 }: U
       // Normalize line endings: \r\n → \n, \r → \n (handles Windows, Unix, and old Mac)
       const normalized = char.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-      pushToHistory(buffer, cursor);
+      const canBatchInsert =
+        undoDebounceMs > 0 &&
+        normalized.length === 1 &&
+        normalized !== '\n';
+
+      if (canBatchInsert) {
+        beginOrRefreshInsertBatch(buffer, cursor);
+      } else {
+        flushPendingInsertBatch();
+        pushToHistory(buffer, cursor);
+      }
 
       // TextBuffer now handles multi-line insertion internally
       const result = bufferInsertText(buffer, cursor, normalized);
       setBuffer(result.buffer);
       setCursor(result.cursor);
     },
-    [buffer, cursor, pushToHistory]
+    [beginOrRefreshInsertBatch, buffer, cursor, flushPendingInsertBatch, pushToHistory, undoDebounceMs]
   );
 
   const deleteChar = useCallback(() => {
+    flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
     const result = bufferDeleteChar(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
-  }, [buffer, cursor, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
 
   const deleteCharForward = useCallback(() => {
+    flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
     const result = bufferDeleteCharForward(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
-  }, [buffer, cursor, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
 
   const newLine = useCallback(() => {
+    flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
     const result = bufferInsertNewLine(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
-  }, [buffer, cursor, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
 
   const deleteAndNewLine = useCallback(() => {
+    flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
     // First delete the character before cursor (the backslash)
     const afterDelete = bufferDeleteChar(buffer, cursor);
@@ -113,17 +189,29 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100 }: U
     const afterNewLine = bufferInsertNewLine(afterDelete.buffer, afterDelete.cursor);
     setBuffer(afterNewLine.buffer);
     setCursor(afterNewLine.cursor);
-  }, [buffer, cursor, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
 
   const moveCursor = useCallback(
     (direction: Direction) => {
+      flushPendingInsertBatch();
       const newCursor = bufferMoveCursor(buffer, cursor, direction, width);
       setCursor(newCursor);
     },
-    [buffer, cursor, width]
+    [buffer, cursor, flushPendingInsertBatch, width]
   );
 
   const undo = useCallback(() => {
+    const pendingStartState = pendingInsertBatchRef.current.startState;
+    if (pendingStartState) {
+      clearPendingInsertTimer();
+      pendingInsertBatchRef.current.startState = undefined;
+
+      setRedoStack((prev) => [...prev, { buffer, cursor }]);
+      setBuffer(pendingStartState.buffer);
+      setCursor(pendingStartState.cursor);
+      return;
+    }
+
     if (undoStack.length === 0) return;
 
     const previousState = undoStack[undoStack.length - 1];
@@ -133,9 +221,13 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100 }: U
     setBuffer(previousState.buffer);
     setCursor(previousState.cursor);
     setUndoStack(newUndoStack);
-  }, [buffer, cursor, undoStack]);
+  }, [buffer, clearPendingInsertTimer, cursor, undoStack]);
 
   const redo = useCallback(() => {
+    if (pendingInsertBatchRef.current.startState) {
+      return;
+    }
+
     if (redoStack.length === 0) return;
 
     const nextState = redoStack[redoStack.length - 1];
@@ -149,6 +241,7 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100 }: U
 
   const setText = useCallback(
     (text: string) => {
+      flushPendingInsertBatch();
       pushToHistory(buffer, cursor);
       const newBuffer = createBuffer(text);
       setBuffer(newBuffer);
@@ -160,7 +253,7 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100 }: U
         column: lines[lines.length - 1].length,
       });
     },
-    [buffer, cursor, pushToHistory]
+    [buffer, cursor, flushPendingInsertBatch, pushToHistory]
   );
 
   return {
@@ -178,9 +271,10 @@ export function useTextInput({ initialValue = '', width, historyLimit = 100 }: U
     cursorOffset: getOffset(buffer, cursor),
     setCursorOffset: useCallback(
       (offset: number) => {
+        flushPendingInsertBatch();
         setCursor(getCursor(buffer, offset));
       },
-      [buffer]
+      [buffer, flushPendingInsertBatch]
     ),
   };
 }
