@@ -40,7 +40,8 @@
 - Implement undo/redo history:
   - `undoStack` stores past states
   - `redoStack` stores states that were undone
-  - Each edit action pushes current state to `undoStack` and clears `redoStack`
+  - Most edit actions push current state to `undoStack` and clear `redoStack`
+  - Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
   - Undo pops from `undoStack` and pushes to `redoStack`
   - Redo pops from `redoStack` and pushes back to `undoStack`
 - Handle cursor bounds validation
@@ -194,7 +195,7 @@ Screen Output
 
 1. **Edit Action Triggered** (e.g., user types 'a')
    - `useTextInput.insert('a')` called
-   - Current state pushed to `undoStack`
+   - Current state is saved for undo (debounced single-character inserts may be batched into one undo step)
    - `TextBuffer.insertText()` computed new buffer
    - State updated
 

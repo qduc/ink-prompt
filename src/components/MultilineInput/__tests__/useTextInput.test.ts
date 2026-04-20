@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { useTextInput } from '../useTextInput.js';
 
 describe('useTextInput', () => {
@@ -80,6 +80,91 @@ describe('useTextInput', () => {
       result.current.redo();
     });
     expect(result.current.value).toBe('a');
+  });
+
+  it('should batch consecutive inserts into one undo step when undoDebounceMs is set', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useTextInput({ undoDebounceMs: 200 }));
+
+    act(() => {
+      result.current.insert('a');
+    });
+    act(() => {
+      result.current.insert('b');
+    });
+    act(() => {
+      result.current.insert('c');
+    });
+    expect(result.current.value).toBe('abc');
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.value).toBe('');
+
+    act(() => {
+      result.current.redo();
+    });
+    expect(result.current.value).toBe('abc');
+
+    vi.useRealTimers();
+  });
+
+  it('should undo a pending debounced batch without waiting for commit', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useTextInput({ undoDebounceMs: 200 }));
+
+    act(() => {
+      result.current.insert('a');
+    });
+    act(() => {
+      result.current.insert('b');
+    });
+    expect(result.current.value).toBe('ab');
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.value).toBe('');
+
+    vi.useRealTimers();
+  });
+
+  it('should create separate undo steps when there is an idle gap', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useTextInput({ undoDebounceMs: 200 }));
+
+    act(() => {
+      result.current.insert('a');
+    });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    act(() => {
+      result.current.insert('b');
+    });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    expect(result.current.value).toBe('ab');
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.value).toBe('a');
+
+    act(() => {
+      result.current.undo();
+    });
+    expect(result.current.value).toBe('');
+
+    vi.useRealTimers();
   });
 
   it('should remove backslash when deleted at end of line', () => {
@@ -220,7 +305,7 @@ describe('useTextInput', () => {
 
   describe('history limit', () => {
     it('should use default history limit of 100', () => {
-      const { result } = renderHook(() => useTextInput());
+      const { result } = renderHook(() => useTextInput({ undoDebounceMs: 0 }));
 
       // Insert 5 characters separately
       for (let i = 0; i < 5; i++) {
@@ -250,7 +335,7 @@ describe('useTextInput', () => {
     });
 
     it('should respect custom history limit', () => {
-      const { result } = renderHook(() => useTextInput({ historyLimit: 3 }));
+      const { result } = renderHook(() => useTextInput({ historyLimit: 3, undoDebounceMs: 0 }));
 
       // Insert 5 characters
       for (let i = 0; i < 5; i++) {
@@ -280,7 +365,7 @@ describe('useTextInput', () => {
     });
 
     it('should trim oldest history when limit exceeded', () => {
-      const { result } = renderHook(() => useTextInput({ historyLimit: 3 }));
+      const { result } = renderHook(() => useTextInput({ historyLimit: 3, undoDebounceMs: 0 }));
 
       // Insert 5 characters
       for (let i = 0; i < 5; i++) {
@@ -310,7 +395,7 @@ describe('useTextInput', () => {
     });
 
     it('should clear redo stack when new edit happens', () => {
-      const { result } = renderHook(() => useTextInput({ historyLimit: 5 }));
+      const { result } = renderHook(() => useTextInput({ historyLimit: 5, undoDebounceMs: 0 }));
 
       act(() => {
         result.current.insert('a');
@@ -362,7 +447,7 @@ describe('useTextInput', () => {
     });
 
     it('should prevent excessive memory use with bounded history', () => {
-      const { result } = renderHook(() => useTextInput({ historyLimit: 10 }));
+      const { result } = renderHook(() => useTextInput({ historyLimit: 10, undoDebounceMs: 0 }));
 
       // Insert 30 characters
       for (let i = 0; i < 30; i++) {

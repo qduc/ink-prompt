@@ -60,6 +60,12 @@ export interface MultilineInputProps {
    * - 'right': cursor is at end of text (after last character)
    */
   onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
+  /**
+   * Batches consecutive single-character inserts into a single undo step.
+   * The batch is committed after this many milliseconds of inactivity (default: 200).
+   * Set to 0 to disable batching (undo will be per edit again).
+   */
+  undoDebounceMs?: number;
 }
 
 /**
@@ -114,6 +120,12 @@ export interface MultilineInputCoreProps {
    * - 'right': cursor is at end of text (after last character)
    */
   onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
+  /**
+   * Batches consecutive single-character inserts into a single undo step.
+   * The batch is committed after this many milliseconds of inactivity (default: 200).
+   * Set to 0 to disable batching (undo will be per edit again).
+   */
+  undoDebounceMs?: number;
 }
 
 /**
@@ -128,8 +140,9 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   width = 80,
   onCursorChange,
   cursorOverride,
+  undoDebounceMs,
 }) => {
-  const textInput = useTextInput({ initialValue: value ?? '' });
+  const textInput = useTextInput({ initialValue: value ?? '', undoDebounceMs });
 
   // Track whether a value change is from syncing props (not user input)
   const isSyncingFromProps = useRef(false);
@@ -214,6 +227,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   onCursorChange,
   cursorOverride,
   onBoundaryArrow,
+  undoDebounceMs,
 }) => {
 
   // Get terminal width from Ink (with resize support) if not provided
@@ -237,7 +251,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     };
   }, [stdin, isActive]);
 
-  const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth });
+  const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth, undoDebounceMs });
 
   // Handle cursor override
   useEffect(() => {

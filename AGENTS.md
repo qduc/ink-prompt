@@ -63,6 +63,7 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - When undo stack exceeds the limit, oldest entries are discarded
 - Each history entry stores a full snapshot of the buffer and cursor state
 - Redo stack is cleared whenever a new edit occurs
+- Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
 
 **Build System:**
 - TypeScript compiles from `src/` to `dist/`
@@ -71,12 +72,13 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - Target: ES2020
 
 **Dependencies:**
-- Peer dependencies: React 16.8+ and Ink 4.x/5.x
-- Components must be compatible with both major Ink versions
+- Peer dependencies: React 16.8+ and Ink 4.x/5.x/6.x/7.x
+- Components must be compatible with Ink versions from 4.x through 7.x
+- Maintain compatibility with both Ink 4.x and 7.x (and versions in-between)
 - Development uses Vitest for testing with happy-dom for React component testing
 
 ## Key Constraints
 
 - This is a library package, not an application - focus on reusable components
 - Components must work in terminal environments (Ink limitations apply)
-- Maintain compatibility with both Ink 4.x and 5.x
+- Maintain compatibility with Ink versions from 4.x through 7.x
