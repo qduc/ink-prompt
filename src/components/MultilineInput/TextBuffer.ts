@@ -1,4 +1,6 @@
 import type { Buffer, Cursor, Direction } from './types.js';
+import { SENTINEL_OPEN } from './ImageTypes.js';
+import { parseSentinels, findSentinelAt, getPlaceholderVisualWidth } from './ImageSentinel.js';
 
 /**
  * Create a new buffer from optional initial text
@@ -82,8 +84,22 @@ export function deleteChar(
     };
   }
 
-  // Delete character within the line
+  // Check if deleting a sentinel closer - atomically remove whole block
   const currentLine = buffer.lines[line];
+  const charBefore = currentLine[column - 1];
+  if (charBefore === '\uE001') {
+    const sentinel = findSentinelAt(currentLine, column - 1);
+    if (sentinel) {
+      const newLine = currentLine.slice(0, sentinel.start) + currentLine.slice(sentinel.end);
+      const newLines = [...buffer.lines];
+      newLines[line] = newLine;
+      return {
+        buffer: { lines: newLines },
+        cursor: { line, column: sentinel.start },
+      };
+    }
+  }
+
   const newLine = currentLine.slice(0, column - 1) + currentLine.slice(column);
 
   const newLines = [...buffer.lines];
@@ -124,6 +140,21 @@ export function deleteCharForward(
       buffer: { lines: newLines },
       cursor, // Cursor stays in place
     };
+  }
+
+  // Check if cursor is at a sentinel opener - atomically remove whole block
+  const charAt = currentLine[column];
+  if (charAt === '\uE000') {
+    const sentinel = findSentinelAt(currentLine, column);
+    if (sentinel) {
+      const newLine = currentLine.slice(0, sentinel.start) + currentLine.slice(sentinel.end);
+      const newLines = [...buffer.lines];
+      newLines[line] = newLine;
+      return {
+        buffer: { lines: newLines },
+        cursor,
+      };
+    }
   }
 
   // Delete character after cursor within the line
@@ -171,10 +202,16 @@ interface VisualRowInfo {
   length: number;
 }
 
+function getVisualWidth(char: string): number {
+  return 1;
+}
+
 /**
  * Break a line into visual rows using word-aware wrapping.
  * Words are kept intact when possible, breaking at spaces.
  * Long words that exceed width are hard-wrapped.
+ * Sentinel blocks are atomic: never split, and occupy visual width
+ * equal to their placeholder text length.
  */
 export function getVisualRows(line: string, width: number): VisualRowInfo[] {
   const safeWidth = Math.max(1, width);
@@ -184,33 +221,102 @@ export function getVisualRows(line: string, width: number): VisualRowInfo[] {
     return [{ start: 0, length: 0 }];
   }
 
-  let offset = 0;
-  let remaining = line;
+  // Fast path: no sentinels, use original logic
+  if (line.indexOf(SENTINEL_OPEN) === -1) {
+    let offset = 0;
+    let remaining = line;
+    while (remaining.length > 0) {
+      let chunkLength = safeWidth;
+      if (remaining.length <= safeWidth) {
+        chunkLength = remaining.length;
+      } else {
+        let splitIndex = -1;
+        for (let i = safeWidth - 1; i >= 0; i--) {
+          if (remaining[i] === ' ') {
+            splitIndex = i;
+            break;
+          }
+        }
+        if (splitIndex !== -1) {
+          chunkLength = splitIndex + 1;
+        }
+      }
+      rows.push({ start: offset, length: chunkLength });
+      remaining = remaining.slice(chunkLength);
+      offset += chunkLength;
+    }
+    return rows;
+  }
 
-  while (remaining.length > 0) {
-    let chunkLength = safeWidth;
+  const sentinels = parseSentinels(line);
+  let charPos = 0;
+  let rowStart = 0;
+  let rowVisualWidth = 0;
+  let lastSpaceCharPos = -1;
 
-    if (remaining.length <= safeWidth) {
-      chunkLength = remaining.length;
-    } else {
-      // Find split point (last space within width)
-      let splitIndex = -1;
-      for (let i = safeWidth - 1; i >= 0; i--) {
-        if (remaining[i] === ' ') {
-          splitIndex = i;
-          break;
+  while (charPos < line.length) {
+    const sentinel = charPos < sentinels.length && sentinels[charPos] !== undefined
+      ? sentinels.find(s => s.start === charPos)
+      : undefined;
+
+    let effectiveSentinel: typeof sentinels[0] | undefined;
+    if (line[charPos] === SENTINEL_OPEN) {
+      effectiveSentinel = sentinels.find(s => s.start === charPos);
+    }
+
+    if (effectiveSentinel) {
+      const svw = getPlaceholderVisualWidth(effectiveSentinel.displayNumber);
+
+      if (rowVisualWidth > 0 && rowVisualWidth + svw > safeWidth) {
+        if (lastSpaceCharPos >= rowStart) {
+          rows.push({ start: rowStart, length: lastSpaceCharPos - rowStart });
+          rowStart = lastSpaceCharPos + 1;
+          charPos = rowStart;
+          rowVisualWidth = 0;
+          lastSpaceCharPos = -1;
+          continue;
+        } else {
+          rows.push({ start: rowStart, length: charPos - rowStart });
+          rowStart = charPos;
+          rowVisualWidth = 0;
         }
       }
 
-      if (splitIndex !== -1) {
-        // Include the space in the chunk
-        chunkLength = splitIndex + 1;
+      rowVisualWidth += svw;
+      charPos = effectiveSentinel.end;
+      lastSpaceCharPos = -1;
+      continue;
+    }
+
+    const ch = line[charPos];
+    const cw = getVisualWidth(ch);
+
+    if (rowVisualWidth + cw > safeWidth) {
+      if (lastSpaceCharPos >= rowStart) {
+        rows.push({ start: rowStart, length: lastSpaceCharPos - rowStart });
+        rowStart = lastSpaceCharPos + 1;
+        charPos = rowStart;
+        rowVisualWidth = 0;
+        lastSpaceCharPos = -1;
+        continue;
+      } else {
+        rows.push({ start: rowStart, length: charPos - rowStart });
+        rowStart = charPos;
+        rowVisualWidth = 0;
       }
     }
 
-    rows.push({ start: offset, length: chunkLength });
-    remaining = remaining.slice(chunkLength);
-    offset += chunkLength;
+    rowVisualWidth += cw;
+    if (ch === ' ') {
+      lastSpaceCharPos = charPos;
+    }
+    charPos++;
+  }
+
+  if (rowStart < line.length) {
+    rows.push({ start: rowStart, length: line.length - rowStart });
+  } else if (rows.length === 0) {
+    rows.push({ start: 0, length: 0 });
   }
 
   return rows;
@@ -310,8 +416,16 @@ export function moveCursor(
   const lineCount = buffer.lines.length;
 
   switch (direction) {
-    case 'left':
+    case 'left': {
       if (column > 0) {
+        // If position before cursor is a sentinel closer, jump to before opener
+        const charBefore = currentLine[column - 1];
+        if (charBefore === '\uE001') {
+          const sentinel = findSentinelAt(currentLine, column - 1);
+          if (sentinel) {
+            return { line, column: sentinel.start };
+          }
+        }
         return { line, column: column - 1 };
       }
       // Wrap to end of previous line
@@ -319,9 +433,18 @@ export function moveCursor(
         return { line: line - 1, column: buffer.lines[line - 1].length };
       }
       return cursor;
+    }
 
-    case 'right':
+    case 'right': {
       if (column < currentLine.length) {
+        // If cursor is immediately before a sentinel opener, jump to after closer
+        const charAt = currentLine[column];
+        if (charAt === '\uE000') {
+          const sentinel = findSentinelAt(currentLine, column);
+          if (sentinel) {
+            return { line, column: sentinel.end };
+          }
+        }
         return { line, column: column + 1 };
       }
       // Wrap to start of next line
@@ -329,6 +452,7 @@ export function moveCursor(
         return { line: line + 1, column: 0 };
       }
       return cursor;
+    }
 
     case 'up':
       if (width !== undefined) {

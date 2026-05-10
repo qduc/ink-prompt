@@ -2,6 +2,8 @@ This file provides guidance to AI assistants when working with code in this repo
 
 REMEMBER: This file must be kept up-to-date with every _architecture_ change to the project. It is your job to do it without waiting for user's request.
 
+REMEMBER: `README.md` must be kept up-to-date whenever adding a user-facing feature, changing component props, changing exported types, or changing documented behavior.
+
 ## Project Overview
 
 `ink-prompt` is a React Ink component library for creating interactive CLI prompts. It provides reusable components that integrate with Ink's terminal rendering system to enable user input in CLI applications.
@@ -56,14 +58,33 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - Word-aware wrapping: Text wraps at word boundaries (spaces) when possible
 - Long words that exceed the terminal width are hard-wrapped
 - Both rendering (`wrapLines` in TextRenderer) and cursor navigation (`moveCursor` in TextBuffer) use consistent word-aware wrapping logic
+- Sentinel blocks (image placeholders) are atomic — never split across visual rows
+- Visual width of a sentinel block equals its placeholder text length (`[Pasted Image #N]`)
 
 **Undo/Redo History Management:**
 - `useTextInput` hook maintains undo/redo stacks for text edits
 - History is bounded by `historyLimit` option (default: 100 entries) to prevent unbounded memory growth
 - When undo stack exceeds the limit, oldest entries are discarded
-- Each history entry stores a full snapshot of the buffer and cursor state
+- Each history entry stores a full snapshot of the buffer, cursor, and images state
 - Redo stack is cleared whenever a new edit occurs
 - Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
+
+**Image Paste Support:**
+- Optional feature controlled by `enableImagePaste` prop (default `false`), backward compatible
+- Images are represented by sentinel placeholders in the text buffer: `\uE000{id}:{displayNumber}\uE001`
+- Sentinels are atomic units — cursor jumps over them, delete/backspace removes the whole block
+- Rendered as `[Pasted Image #N]` text with `dimColor` styling
+- Visual width of a sentinel equals its placeholder text length for correct wrapping
+
+**Clipboard Reader Abstraction:**
+- `src/components/MultilineInput/clipboard/` — platform-specific clipboard readers
+  - `MacOSClipboardReader` — uses `osascript` to read `«class PNGf»` and plain text
+  - `LinuxX11ClipboardReader` — uses `xclip` with image/png and text/plain targets
+  - `LinuxWaylandClipboardReader` — uses `wl-paste` with --type flags
+  - `WindowsClipboardReader` — uses PowerShell `Get-Clipboard` and `System.Windows.Forms.Clipboard`
+  - Factory `createClipboardReader()` detects platform via `process.platform` and `$WAYLAND_DISPLAY`
+- `ImageValidator` sniffs magic bytes (PNG, JPEG, WebP, GIF) and enforces size/count/mime limits
+- `useClipboardPaste` hook wraps async clipboard reading with 1500ms timeout and error mapping
 
 **Build System:**
 - TypeScript compiles from `src/` to `dist/`

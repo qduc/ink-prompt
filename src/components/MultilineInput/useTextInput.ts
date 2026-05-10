@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   createBuffer,
   insertText as bufferInsertText,
@@ -11,18 +11,14 @@ import {
   getCursor,
 } from './TextBuffer.js';
 import type { Buffer, Cursor, Direction } from './types.js';
+import type { ImageRef } from './ImageTypes.js';
+import { createSentinel, parseSentinels, findSentinelAt } from './ImageSentinel.js';
 import { log } from '../../utils/logger.js';
 
 export interface UseTextInputProps {
   initialValue?: string;
-  /** Terminal width for visual-aware cursor navigation (up/down arrows respect line wrapping) */
   width?: number;
-  /** Maximum number of history entries to keep (default: 100) */
   historyLimit?: number;
-  /**
-   * When > 0, consecutive single-character inserts are batched into a single undo step.
-   * A batch is committed after this many milliseconds of inactivity (default: 200).
-   */
   undoDebounceMs?: number;
 }
 
@@ -40,11 +36,16 @@ export interface UseTextInputResult {
   setText: (text: string) => void;
   cursorOffset: number;
   setCursorOffset: (offset: number) => void;
+  insertImage: (imageRef: ImageRef) => void;
+  images: ImageRef[];
+  getImages: () => ImageRef[];
+  setImages: (images: ImageRef[]) => void;
 }
 
 interface HistoryState {
   buffer: Buffer;
   cursor: Cursor;
+  images: Record<string, ImageRef>;
 }
 
 export function useTextInput({
@@ -61,6 +62,8 @@ export function useTextInput({
       column: lines[lines.length - 1].length,
     };
   });
+  const [images, setImages] = useState<Record<string, ImageRef>>({});
+  const nextDisplayNumberRef = useRef(1);
 
   const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
@@ -107,20 +110,20 @@ export function useTextInput({
 
   const beginOrRefreshInsertBatch = useCallback((currentBuffer: Buffer, currentCursor: Cursor) => {
     if (!pendingInsertBatchRef.current.startState) {
-      pendingInsertBatchRef.current.startState = { buffer: currentBuffer, cursor: currentCursor };
+      pendingInsertBatchRef.current.startState = { buffer: currentBuffer, cursor: currentCursor, images };
       setRedoStack([]);
     }
     schedulePendingInsertCommit();
-  }, [schedulePendingInsertCommit]);
+  }, [schedulePendingInsertCommit, images]);
 
   const flushPendingInsertBatch = useCallback(() => {
     commitPendingInsertBatch();
   }, [commitPendingInsertBatch]);
 
   const pushToHistory = useCallback((currentBuffer: Buffer, currentCursor: Cursor) => {
-    appendUndoState({ buffer: currentBuffer, cursor: currentCursor });
+    appendUndoState({ buffer: currentBuffer, cursor: currentCursor, images });
     setRedoStack([]);
-  }, [appendUndoState]);
+  }, [appendUndoState, images]);
 
   useEffect(() => {
     return () => {
@@ -133,7 +136,6 @@ export function useTextInput({
     (char: string) => {
       log(`[INSERT] char="${char.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" len=${char.length} cursor={line:${cursor.line},col:${cursor.column}} linesBefore=${buffer.lines.length}`);
 
-      // Normalize line endings: \r\n → \n, \r → \n (handles Windows, Unix, and old Mac)
       const normalized = char.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
       const canBatchInsert =
@@ -148,7 +150,6 @@ export function useTextInput({
         pushToHistory(buffer, cursor);
       }
 
-      // TextBuffer now handles multi-line insertion internally
       const result = bufferInsertText(buffer, cursor, normalized);
       setBuffer(result.buffer);
       setCursor(result.cursor);
@@ -159,18 +160,42 @@ export function useTextInput({
   const deleteChar = useCallback(() => {
     flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
+
+    // Check if deleting a sentinel
+    const currentLine = buffer.lines[cursor.line];
+    if (cursor.column > 0 && currentLine[cursor.column - 1] === '\uE001') {
+      const sentinel = findSentinelAt(currentLine, cursor.column - 1);
+      if (sentinel && images[sentinel.id]) {
+        const newImages = { ...images };
+        delete newImages[sentinel.id];
+        setImages(newImages);
+      }
+    }
+
     const result = bufferDeleteChar(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory, images]);
 
   const deleteCharForward = useCallback(() => {
     flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
+
+    // Check if deleting a sentinel
+    const currentLine = buffer.lines[cursor.line];
+    if (cursor.column < currentLine.length && currentLine[cursor.column] === '\uE000') {
+      const sentinel = findSentinelAt(currentLine, cursor.column);
+      if (sentinel && images[sentinel.id]) {
+        const newImages = { ...images };
+        delete newImages[sentinel.id];
+        setImages(newImages);
+      }
+    }
+
     const result = bufferDeleteCharForward(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory, images]);
 
   const newLine = useCallback(() => {
     flushPendingInsertBatch();
@@ -183,9 +208,7 @@ export function useTextInput({
   const deleteAndNewLine = useCallback(() => {
     flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
-    // First delete the character before cursor (the backslash)
     const afterDelete = bufferDeleteChar(buffer, cursor);
-    // Then insert newline using the updated buffer and cursor
     const afterNewLine = bufferInsertNewLine(afterDelete.buffer, afterDelete.cursor);
     setBuffer(afterNewLine.buffer);
     setCursor(afterNewLine.cursor);
@@ -206,9 +229,10 @@ export function useTextInput({
       clearPendingInsertTimer();
       pendingInsertBatchRef.current.startState = undefined;
 
-      setRedoStack((prev) => [...prev, { buffer, cursor }]);
+      setRedoStack((prev) => [...prev, { buffer, cursor, images }]);
       setBuffer(pendingStartState.buffer);
       setCursor(pendingStartState.cursor);
+      setImages(pendingStartState.images);
       return;
     }
 
@@ -217,11 +241,12 @@ export function useTextInput({
     const previousState = undoStack[undoStack.length - 1];
     const newUndoStack = undoStack.slice(0, -1);
 
-    setRedoStack((prev) => [...prev, { buffer, cursor }]);
+    setRedoStack((prev) => [...prev, { buffer, cursor, images }]);
     setBuffer(previousState.buffer);
     setCursor(previousState.cursor);
+    setImages(previousState.images);
     setUndoStack(newUndoStack);
-  }, [buffer, clearPendingInsertTimer, cursor, undoStack]);
+  }, [buffer, clearPendingInsertTimer, cursor, images, undoStack]);
 
   const redo = useCallback(() => {
     if (pendingInsertBatchRef.current.startState) {
@@ -233,11 +258,12 @@ export function useTextInput({
     const nextState = redoStack[redoStack.length - 1];
     const newRedoStack = redoStack.slice(0, -1);
 
-    setUndoStack((prev) => [...prev, { buffer, cursor }]);
+    setUndoStack((prev) => [...prev, { buffer, cursor, images }]);
     setBuffer(nextState.buffer);
     setCursor(nextState.cursor);
+    setImages(nextState.images);
     setRedoStack(newRedoStack);
-  }, [buffer, cursor, redoStack]);
+  }, [buffer, cursor, images, redoStack]);
 
   const setText = useCallback(
     (text: string) => {
@@ -246,15 +272,60 @@ export function useTextInput({
       const newBuffer = createBuffer(text);
       setBuffer(newBuffer);
 
-      // Move cursor to end of new text
       const lines = text.split('\n');
       setCursor({
         line: lines.length - 1,
         column: lines[lines.length - 1].length,
       });
+
+      // Clean up orphaned images
+      const fullText = getTextContent(newBuffer);
+      const sentinels = parseSentinels(fullText);
+      const usedIds = new Set(sentinels.map(s => s.id));
+      setImages((prev) => {
+        const next: Record<string, ImageRef> = {};
+        for (const [id, ref] of Object.entries(prev)) {
+          if (usedIds.has(id)) {
+            next[id] = ref;
+          }
+        }
+        return next;
+      });
     },
     [buffer, cursor, flushPendingInsertBatch, pushToHistory]
   );
+
+  const insertImage = useCallback(
+    (imageRef: ImageRef) => {
+      flushPendingInsertBatch();
+      pushToHistory(buffer, cursor);
+
+      const sentinel = createSentinel(imageRef.id, imageRef.displayNumber);
+      const result = bufferInsertText(buffer, cursor, sentinel);
+      setBuffer(result.buffer);
+      setCursor(result.cursor);
+      setImages((prev) => ({ ...prev, [imageRef.id]: imageRef }));
+
+      if (imageRef.displayNumber >= nextDisplayNumberRef.current) {
+        nextDisplayNumberRef.current = imageRef.displayNumber + 1;
+      }
+    },
+    [buffer, cursor, flushPendingInsertBatch, pushToHistory]
+  );
+
+  const imagesList = useMemo(() => Object.values(images), [images]);
+
+  const getImagesCallback = useCallback((): ImageRef[] => {
+    return imagesList;
+  }, [imagesList]);
+
+  const setImagesCallback = useCallback((newImages: ImageRef[]) => {
+    const map: Record<string, ImageRef> = {};
+    for (const img of newImages) {
+      map[img.id] = img;
+    }
+    setImages(map);
+  }, []);
 
   return {
     value: getTextContent(buffer),
@@ -276,5 +347,9 @@ export function useTextInput({
       },
       [buffer, flushPendingInsertBatch]
     ),
+    insertImage,
+    images: imagesList,
+    getImages: getImagesCallback,
+    setImages: setImagesCallback,
   };
 }
