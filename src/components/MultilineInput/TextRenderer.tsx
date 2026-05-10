@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { Buffer, Cursor, WrapResult } from './types.js';
+import type { Buffer, Cursor, WrapResult, PlaceholderState } from './types.js';
 import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
+import { getDisplayLine, bufferColToDisplayCol } from './Placeholder.js';
 
 /**
  * Props for the TextRenderer component
@@ -15,6 +16,8 @@ export interface TextRendererProps {
   width?: number;
   /** Whether to show the cursor (defaults to true) */
   showCursor?: boolean;
+  /** Placeholder state for expanding paste markers into display text */
+  placeholderState?: PlaceholderState;
 }
 
 /**
@@ -150,9 +153,22 @@ export function TextRenderer({
   cursor,
   width: propWidth,
   showCursor = true,
+  placeholderState,
 }: TextRendererProps): React.ReactElement {
   const width = useTerminalWidth(propWidth);
-  const { visualLines, cursorVisualRow, cursorVisualCol } = wrapLines(buffer, cursor, width);
+
+  // Convert buffer to display text for rendering (expand placeholder markers)
+  const hasPlaceholders = placeholderState && placeholderState.placeholders.size > 0;
+
+  const displayBuffer: Buffer = hasPlaceholders
+    ? { lines: buffer.lines.map(line => getDisplayLine(line, placeholderState!.placeholders)) }
+    : buffer;
+
+  const displayCursor: Cursor = hasPlaceholders && cursor.line < buffer.lines.length
+    ? { line: cursor.line, column: bufferColToDisplayCol(buffer.lines[cursor.line], cursor.column, placeholderState!.placeholders) }
+    : cursor;
+
+  const { visualLines, cursorVisualRow, cursorVisualCol } = wrapLines(displayBuffer, displayCursor, width);
 
   return (
     <Box flexDirection="column">

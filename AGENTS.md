@@ -61,9 +61,21 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - `useTextInput` hook maintains undo/redo stacks for text edits
 - History is bounded by `historyLimit` option (default: 100 entries) to prevent unbounded memory growth
 - When undo stack exceeds the limit, oldest entries are discarded
-- Each history entry stores a full snapshot of the buffer and cursor state
+- Each history entry stores a full snapshot of the buffer, cursor, and placeholder state
 - Redo stack is cleared whenever a new edit occurs
 - Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
+
+**Paste Placeholders (`pasteThreshold`):**
+- `src/components/MultilineInput/Placeholder.ts` - Utility module for paste placeholder markers
+  - When `pasteThreshold` prop is set on MultilineInput, text exceeding this character count (when pasted in a single input event) is replaced with an atomic placeholder marker
+  - Placeholders use inline markers in the buffer string: `\x00P{id}\x00` (null-byte-delimited, cannot be typed by user)
+  - A separate `PlaceholderState` registry tracks `id → { originalText, displayText }`
+  - The internal buffer stores markers; `value` / `onChange` / `onSubmit` return the expanded original text
+  - `TextRenderer` expands markers to display text (e.g., `[Paste text #1]`) for visual rendering
+  - Placeholders are atomic: backspace/delete remove the entire placeholder, arrow keys skip over them
+  - History snapshots include `PlaceholderState`, so undo/redo preserves placeholders
+  - `formatPastePlaceholder` prop allows customizing display text format
+  - `Placeholder.ts` exports utility functions: `createMarker`, `addPlaceholder`, `removePlaceholder`, `getDisplayLine`, `getValue`, `findPlaceholderAt/Before/After`, `bufferColToDisplayCol`, `displayColToBufferCol`, `getValueCursorOffset`, `getCursorFromValueOffset`
 
 **Build System:**
 - TypeScript compiles from `src/` to `dist/`

@@ -39,6 +39,28 @@ export interface WrapResult {
 }
 
 /**
+ * Information about a paste placeholder: its identifier, original text, and display label.
+ */
+export interface PlaceholderInfo {
+  /** Unique placeholder identifier */
+  id: number;
+  /** The original pasted text (may contain newlines) */
+  originalText: string;
+  /** The display label shown in place of the original text (e.g., "[Paste text #1]") */
+  displayText: string;
+}
+
+/**
+ * Registry state for paste placeholders.
+ */
+export interface PlaceholderState {
+  /** Map of placeholder ID to info */
+  placeholders: Map<number, PlaceholderInfo>;
+  /** Next auto-incrementing ID */
+  nextId: number;
+}
+
+/**
  * Keyboard key state (mirrors Ink's Key interface)
  * Defined locally to avoid ESM/CJS import issues with Ink
  */

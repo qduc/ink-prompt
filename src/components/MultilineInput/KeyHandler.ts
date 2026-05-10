@@ -3,7 +3,7 @@ import { type UseTextInputResult } from './useTextInput.js';
 import { getVisualRows } from './TextBuffer.js';
 import { log } from '../../utils/logger.js';
 
-export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor' | 'cursorOffset' | 'setCursorOffset'> {
+export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor' | 'cursorOffset' | 'setCursorOffset' | 'buffer' | 'placeholderState'> {
   submit: () => void;
   onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
 }

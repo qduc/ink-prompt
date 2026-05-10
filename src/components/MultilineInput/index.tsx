@@ -4,7 +4,6 @@ import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
 import { useTextInput } from './useTextInput.js';
 import { handleKey, KeyHandlerActions } from './KeyHandler.js';
 import { TextRenderer } from './TextRenderer.js';
-import { createBuffer } from './TextBuffer.js';
 import { log } from '../../utils/logger.js';
 
 export interface MultilineInputProps {
@@ -66,6 +65,18 @@ export interface MultilineInputProps {
    * Set to 0 to disable batching (undo will be per edit again).
    */
   undoDebounceMs?: number;
+  /**
+   * When set, pasted text exceeding this character count is replaced
+   * with a placeholder (e.g., "[Paste text #1]") for cleaner display.
+   * The original text is preserved and returned via onChange/onSubmit.
+   */
+  pasteThreshold?: number;
+  /**
+   * Custom formatter for the placeholder display text.
+   * Receives the placeholder ID and should return the display string.
+   * Default: (id) => `[Paste text #${id}]`
+   */
+  formatPastePlaceholder?: (id: number) => string;
 }
 
 /**
@@ -126,6 +137,18 @@ export interface MultilineInputCoreProps {
    * Set to 0 to disable batching (undo will be per edit again).
    */
   undoDebounceMs?: number;
+  /**
+   * When set, pasted text exceeding this character count is replaced
+   * with a placeholder (e.g., "[Paste text #1]") for cleaner display.
+   * The original text is preserved and returned via onChange/onSubmit.
+   */
+  pasteThreshold?: number;
+  /**
+   * Custom formatter for the placeholder display text.
+   * Receives the placeholder ID and should return the display string.
+   * Default: (id) => `[Paste text #${id}]`
+   */
+  formatPastePlaceholder?: (id: number) => string;
 }
 
 /**
@@ -141,8 +164,10 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   onCursorChange,
   cursorOverride,
   undoDebounceMs,
+  pasteThreshold,
+  formatPastePlaceholder,
 }) => {
-  const textInput = useTextInput({ initialValue: value ?? '', undoDebounceMs });
+  const textInput = useTextInput({ initialValue: value ?? '', undoDebounceMs, pasteThreshold, formatPastePlaceholder });
 
   // Track whether a value change is from syncing props (not user input)
   const isSyncingFromProps = useRef(false);
@@ -191,9 +216,6 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
     onChangeRef.current?.(textInput.value);
   }, [textInput.value]);
 
-  // Create buffer for TextRenderer
-  const buffer = createBuffer(textInput.value);
-
   // Show placeholder if empty and no cursor shown
   const isEmpty = textInput.value === '';
   const showPlaceholder = isEmpty && placeholder && !showCursor;
@@ -204,10 +226,11 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
 
   return (
     <TextRenderer
-      buffer={buffer}
+      buffer={textInput.buffer}
       cursor={textInput.cursor}
       width={width}
       showCursor={showCursor}
+      placeholderState={textInput.placeholderState}
     />
   );
 };
@@ -228,6 +251,8 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   cursorOverride,
   onBoundaryArrow,
   undoDebounceMs,
+  pasteThreshold,
+  formatPastePlaceholder,
 }) => {
 
   // Get terminal width from Ink (with resize support) if not provided
@@ -251,7 +276,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     };
   }, [stdin, isActive]);
 
-  const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth, undoDebounceMs });
+  const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth, undoDebounceMs, pasteThreshold, formatPastePlaceholder });
 
   // Handle cursor override
   useEffect(() => {
@@ -296,9 +321,6 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     onChangeRef.current?.(textInput.value);
   }, [textInput.value]);
 
-  // Create buffer for TextRenderer and KeyHandler
-  const buffer = createBuffer(textInput.value);
-
   // Create submit handler
   const handleSubmit = useCallback(() => {
     onSubmit?.(textInput.value);
@@ -323,7 +345,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   // Handle keyboard input
   useInput((input: string, key: any) => {
     log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
-    handleKey(key, input, buffer, actions, textInput.cursor, lastRawInput.current, terminalWidth);
+    handleKey(key, input, textInput.buffer, actions, textInput.cursor, lastRawInput.current, terminalWidth);
   }, { isActive });
 
   // Show placeholder if empty and no cursor shown
@@ -340,10 +362,11 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
 
   return (
     <TextRenderer
-      buffer={buffer}
+      buffer={textInput.buffer}
       cursor={textInput.cursor}
       width={terminalWidth}
       showCursor={showCursor}
+      placeholderState={textInput.placeholderState}
     />
   );
 };
