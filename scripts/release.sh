@@ -16,6 +16,10 @@ if [[ -n $(git status -s) ]]; then
   exit 1
 fi
 
+# Run tests
+echo -e "${BLUE}→${NC} Running tests..."
+npm test
+
 # Get current branch
 CURRENT_BRANCH=$(git branch --show-current)
 echo -e "${BLUE}Current branch:${NC} $CURRENT_BRANCH"
@@ -107,10 +111,6 @@ else
   npm version $NEW_VERSION --no-git-tag-version
 fi
 
-# Run tests
-echo -e "${BLUE}→${NC} Running tests..."
-npm test
-
 # Build
 echo -e "${BLUE}→${NC} Building..."
 npm run build
@@ -123,3 +123,23 @@ else
   git add package.json package-lock.json
   git commit -m "chore: bump version to $NEW_VERSION"
 fi
+
+# Tag and Push
+echo -e "${BLUE}→${NC} Tagging version v$NEW_VERSION"
+git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+
+echo -e "${BLUE}→${NC} Pushing to git..."
+git push origin "$CURRENT_BRANCH"
+git push origin "v$NEW_VERSION"
+
+# Check npm login status
+echo -e "${BLUE}→${NC} Checking npm login status..."
+if ! npm whoami > /dev/null 2>&1; then
+  npm login
+fi
+
+# Publish
+echo -e "${BLUE}→${NC} Publishing to npm..."
+npm publish
+
+echo -e "\n${GREEN}Successfully released v$NEW_VERSION!${NC}"
