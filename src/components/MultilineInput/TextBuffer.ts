@@ -4,7 +4,7 @@ import {
   findAtomicBlockSpanning,
   findAtomicBlockBefore,
   findAtomicBlockAfter,
-  type Placeholders,
+  type BlockEntries,
 } from './AtomicBlocks.js';
 
 /**
@@ -31,22 +31,18 @@ export function insertText(
   const { line, column } = cursor;
   const currentLine = buffer.lines[line];
 
-  // Insert text and handle newlines
   const beforeCursor = currentLine.slice(0, column);
   const afterCursor = currentLine.slice(column);
   const fullText = beforeCursor + text + afterCursor;
 
-  // Split into lines
   const newLines = fullText.split('\n');
 
-  // Calculate new cursor position
   const textLines = text.split('\n');
   const cursorLine = line + (textLines.length - 1);
   const cursorColumn = textLines.length === 1
     ? column + text.length
     : textLines[textLines.length - 1].length;
 
-  // Rebuild buffer
   const resultLines = [
     ...buffer.lines.slice(0, line),
     ...newLines,
@@ -65,16 +61,14 @@ export function insertText(
 export function deleteChar(
   buffer: Buffer,
   cursor: Cursor,
-  placeholders?: Placeholders
+  entries?: BlockEntries
 ): { buffer: Buffer; cursor: Cursor } {
   const { line, column } = cursor;
 
-  // At the very start of the buffer - nothing to delete
   if (line === 0 && column === 0) {
     return { buffer, cursor };
   }
 
-  // At the start of a line - merge with previous line
   if (column === 0) {
     const previousLine = buffer.lines[line - 1];
     const currentLine = buffer.lines[line];
@@ -90,9 +84,8 @@ export function deleteChar(
     };
   }
 
-  // Atomic-block deletion (sentinel or placeholder marker) \u2014 remove the whole block
   const currentLine = buffer.lines[line];
-  const block = findAtomicBlockBefore(currentLine, column, placeholders);
+  const block = findAtomicBlockBefore(currentLine, column, entries);
   if (block) {
     const newLine = currentLine.slice(0, block.start) + currentLine.slice(block.end);
     const newLines = [...buffer.lines];
@@ -120,18 +113,16 @@ export function deleteChar(
 export function deleteCharForward(
   buffer: Buffer,
   cursor: Cursor,
-  placeholders?: Placeholders
+  entries?: BlockEntries
 ): { buffer: Buffer; cursor: Cursor } {
   const { line, column } = cursor;
   const currentLine = buffer.lines[line];
   const lineCount = buffer.lines.length;
 
-  // At the very end of the buffer - nothing to delete
   if (line === lineCount - 1 && column >= currentLine.length) {
     return { buffer, cursor };
   }
 
-  // At the end of a line - merge with next line
   if (column >= currentLine.length) {
     const nextLine = buffer.lines[line + 1];
     const mergedLine = currentLine + nextLine;
@@ -142,12 +133,11 @@ export function deleteCharForward(
 
     return {
       buffer: { lines: newLines },
-      cursor, // Cursor stays in place
+      cursor,
     };
   }
 
-  // Atomic-block deletion forward (sentinel or placeholder marker) \u2014 remove the whole block
-  const block = findAtomicBlockAfter(currentLine, column, placeholders);
+  const block = findAtomicBlockAfter(currentLine, column, entries);
   if (block) {
     const newLine = currentLine.slice(0, block.start) + currentLine.slice(block.end);
     const newLines = [...buffer.lines];
@@ -158,7 +148,6 @@ export function deleteCharForward(
     };
   }
 
-  // Delete character after cursor within the line
   const newLine = currentLine.slice(0, column) + currentLine.slice(column + 1);
 
   const newLines = [...buffer.lines];
@@ -166,7 +155,7 @@ export function deleteCharForward(
 
   return {
     buffer: { lines: newLines },
-    cursor, // Cursor stays in place
+    cursor,
   };
 }
 
@@ -193,13 +182,8 @@ export function insertNewLine(
   };
 }
 
-/**
- * Information about a visual row within a wrapped line.
- */
 interface VisualRowInfo {
-  /** Starting offset in the buffer line */
   start: number;
-  /** Length of this visual row */
   length: number;
 }
 
@@ -207,52 +191,117 @@ function getVisualWidth(char: string): number {
   return 1;
 }
 
-/**
- * Break a line into visual rows using word-aware wrapping.
- * Words are kept intact when possible, breaking at spaces.
- * Long words that exceed width are hard-wrapped.
- * Sentinel blocks are atomic: never split, and occupy visual width
- * equal to their placeholder text length.
- */
+function getVisualRowCount(line: string, width: number, entries?: BlockEntries): number {
+  return getVisualRows(line, width, entries).length;
+}
+
+function visualToBufferColumn(
+  visualRow: number,
+  visualCol: number,
+  line: string,
+  width: number,
+  entries?: BlockEntries
+): number {
+  const rows = getVisualRows(line, width, entries);
+  if (visualRow >= rows.length) {
+    return line.length;
+  }
+  const row = rows[visualRow];
+  return Math.min(row.start + visualCol, line.length);
+}
+
+function getVisualRowLength(
+  line: string,
+  visualRow: number,
+  width: number,
+  entries?: BlockEntries
+): number {
+  const rows = getVisualRows(line, width, entries);
+  if (visualRow >= rows.length) return 0;
+  return rows[visualRow].length;
+}
+
+function getVisualPosition(
+  bufferColumn: number,
+  line: string,
+  width: number,
+  entries?: BlockEntries
+): { visualRow: number; visualCol: number } {
+  const rows = getVisualRows(line, width, entries);
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowEnd = row.start + row.length;
+
+    if (bufferColumn >= row.start && bufferColumn < rowEnd) {
+      return { visualRow: i, visualCol: bufferColumn - row.start };
+    }
+    if (bufferColumn === rowEnd && i === rows.length - 1) {
+      return { visualRow: i, visualCol: row.length };
+    }
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (bufferColumn === row.start + row.length && i < rows.length - 1) {
+      return { visualRow: i + 1, visualCol: 0 };
+    }
+  }
+
+  const lastRow = rows[rows.length - 1];
+  return { visualRow: rows.length - 1, visualCol: lastRow.length };
+}
+
 export function getVisualRows(
   line: string,
   width: number,
-  placeholders?: Placeholders
+  entries?: BlockEntries
 ): VisualRowInfo[] {
   const safeWidth = Math.max(1, width);
   const rows: VisualRowInfo[] = [];
+  const blocks = findAtomicBlocks(line, entries);
 
-  if (line.length === 0) {
-    return [{ start: 0, length: 0 }];
+  if (blocks.length > 0) {
+    return getVisualRowsWithBlocks(line, safeWidth, rows, blocks);
   }
 
-  const blocks = findAtomicBlocks(line, placeholders);
-
-  // Fast path: no atomic blocks
-  if (blocks.length === 0) {
-    let offset = 0;
-    let remaining = line;
-    while (remaining.length > 0) {
-      let chunkLength = safeWidth;
-      if (remaining.length <= safeWidth) {
-        chunkLength = remaining.length;
-      } else {
-        let splitIndex = -1;
-        for (let i = safeWidth - 1; i >= 0; i--) {
-          if (remaining[i] === ' ') {
-            splitIndex = i;
-            break;
-          }
-        }
-        if (splitIndex !== -1) {
-          chunkLength = splitIndex + 1;
+  let offset = 0;
+  let remaining = line;
+  while (remaining.length > 0) {
+    let chunkLength = safeWidth;
+    if (remaining.length <= safeWidth) {
+      chunkLength = remaining.length;
+    } else {
+      let splitIndex = -1;
+      for (let i = safeWidth - 1; i >= 0; i--) {
+        if (remaining[i] === ' ') {
+          splitIndex = i;
+          break;
         }
       }
-      rows.push({ start: offset, length: chunkLength });
-      remaining = remaining.slice(chunkLength);
-      offset += chunkLength;
+      if (splitIndex !== -1) {
+        chunkLength = splitIndex + 1;
+      }
     }
-    return rows;
+    rows.push({ start: offset, length: chunkLength });
+    remaining = remaining.slice(chunkLength);
+    offset += chunkLength;
+  }
+
+  if (rows.length === 0) {
+    return [{ start: 0, length: 0 }];
+  }
+  return rows;
+}
+
+function getVisualRowsWithBlocks(
+  line: string,
+  safeWidth: number,
+  rows: VisualRowInfo[],
+  blocks: ReturnType<typeof findAtomicBlocks>
+): VisualRowInfo[] {
+  if (line.length === 0) {
+    return [{ start: 0, length: 0 }];
   }
 
   let charPos = 0;
@@ -325,98 +374,12 @@ export function getVisualRows(
   return rows;
 }
 
-/**
- * Calculate which visual row (within a buffer line) the cursor is on,
- * and the column within that visual row.
- * Uses word-aware wrapping.
- */
-function getVisualPosition(
-  bufferColumn: number,
-  line: string,
-  width: number,
-  placeholders?: Placeholders
-): { visualRow: number; visualCol: number } {
-  const rows = getVisualRows(line, width, placeholders);
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const rowEnd = row.start + row.length;
-
-    if (bufferColumn >= row.start && bufferColumn < rowEnd) {
-      return { visualRow: i, visualCol: bufferColumn - row.start };
-    }
-    // Handle cursor at the very end of this row
-    if (bufferColumn === rowEnd && i === rows.length - 1) {
-      return { visualRow: i, visualCol: row.length };
-    }
-  }
-
-  // Cursor at wrap point - belongs to the next row
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (bufferColumn === row.start + row.length && i < rows.length - 1) {
-      return { visualRow: i + 1, visualCol: 0 };
-    }
-  }
-
-  // Fallback: cursor at end of line
-  const lastRow = rows[rows.length - 1];
-  return { visualRow: rows.length - 1, visualCol: lastRow.length };
-}
-
-/**
- * Calculate how many visual rows a buffer line takes.
- * Uses word-aware wrapping.
- */
-function getVisualRowCount(line: string, width: number, placeholders?: Placeholders): number {
-  return getVisualRows(line, width, placeholders).length;
-}
-
-/**
- * Convert visual position back to buffer column.
- * Uses word-aware wrapping.
- */
-function visualToBufferColumn(
-  visualRow: number,
-  visualCol: number,
-  line: string,
-  width: number,
-  placeholders?: Placeholders
-): number {
-  const rows = getVisualRows(line, width, placeholders);
-  if (visualRow >= rows.length) {
-    return line.length;
-  }
-  const row = rows[visualRow];
-  return Math.min(row.start + visualCol, line.length);
-}
-
-/**
- * Get the length of a specific visual row within a buffer line.
- * Uses word-aware wrapping.
- */
-function getVisualRowLength(
-  line: string,
-  visualRow: number,
-  width: number,
-  placeholders?: Placeholders
-): number {
-  const rows = getVisualRows(line, width, placeholders);
-  if (visualRow >= rows.length) return 0;
-  return rows[visualRow].length;
-}
-
-/**
- * Move cursor in specified direction with bounds checking.
- * When width is provided, up/down movement is based on visual lines (accounting for wrapping).
- * When width is not provided, up/down movement is based on buffer lines.
- */
 export function moveCursor(
   buffer: Buffer,
   cursor: Cursor,
   direction: Direction,
   width?: number,
-  placeholders?: Placeholders
+  entries?: BlockEntries
 ): Cursor {
   const { line, column } = cursor;
   const currentLine = buffer.lines[line];
@@ -425,12 +388,10 @@ export function moveCursor(
   switch (direction) {
     case 'left': {
       if (column > 0) {
-        // If position before cursor is the end of an atomic block, jump to its start
-        const block = findAtomicBlockBefore(currentLine, column, placeholders);
+        const block = findAtomicBlockBefore(currentLine, column, entries);
         if (block) return { line, column: block.start };
         return { line, column: column - 1 };
       }
-      // Wrap to end of previous line
       if (line > 0) {
         return { line: line - 1, column: buffer.lines[line - 1].length };
       }
@@ -439,12 +400,10 @@ export function moveCursor(
 
     case 'right': {
       if (column < currentLine.length) {
-        // If cursor is at the start of an atomic block, jump past its end
-        const block = findAtomicBlockAfter(currentLine, column, placeholders);
+        const block = findAtomicBlockAfter(currentLine, column, entries);
         if (block) return { line, column: block.end };
         return { line, column: column + 1 };
       }
-      // Wrap to start of next line
       if (line < lineCount - 1) {
         return { line: line + 1, column: 0 };
       }
@@ -453,22 +412,22 @@ export function moveCursor(
 
     case 'up':
       if (width !== undefined) {
-        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width, placeholders);
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width, entries);
 
         if (visualRow > 0) {
           const targetVisualRow = visualRow - 1;
-          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width, placeholders);
+          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width, entries);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width, placeholders) };
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width, entries) };
         }
 
         if (line > 0) {
           const prevLine = buffer.lines[line - 1];
-          const prevLineVisualRows = getVisualRowCount(prevLine, width, placeholders);
+          const prevLineVisualRows = getVisualRowCount(prevLine, width, entries);
           const targetVisualRow = prevLineVisualRows - 1;
-          const targetVisualRowLength = getVisualRowLength(prevLine, targetVisualRow, width, placeholders);
+          const targetVisualRowLength = getVisualRowLength(prevLine, targetVisualRow, width, entries);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line: line - 1, column: visualToBufferColumn(targetVisualRow, targetVisualCol, prevLine, width, placeholders) };
+          return { line: line - 1, column: visualToBufferColumn(targetVisualRow, targetVisualCol, prevLine, width, entries) };
         }
 
         return cursor;
@@ -482,19 +441,19 @@ export function moveCursor(
 
     case 'down':
       if (width !== undefined) {
-        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width, placeholders);
-        const currentLineVisualRows = getVisualRowCount(currentLine, width, placeholders);
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width, entries);
+        const currentLineVisualRows = getVisualRowCount(currentLine, width, entries);
 
         if (visualRow < currentLineVisualRows - 1) {
           const targetVisualRow = visualRow + 1;
-          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width, placeholders);
+          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width, entries);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width, placeholders) };
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width, entries) };
         }
 
         if (line < lineCount - 1) {
           const nextLine = buffer.lines[line + 1];
-          const targetVisualRowLength = getVisualRowLength(nextLine, 0, width, placeholders);
+          const targetVisualRowLength = getVisualRowLength(nextLine, 0, width, entries);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
           return { line: line + 1, column: Math.min(targetVisualCol, nextLine.length) };
         }
@@ -502,7 +461,6 @@ export function moveCursor(
         return cursor;
       }
 
-      // Buffer-line movement (no width provided)
       if (line < lineCount - 1) {
         const targetLine = buffer.lines[line + 1];
         return { line: line + 1, column: Math.min(column, targetLine.length) };
@@ -520,70 +478,40 @@ export function moveCursor(
   }
 }
 
-/**
- * Get the full text content from buffer (lines joined with newlines)
- */
 export function getTextContent(buffer: Buffer): string {
-  // Single empty line is considered empty buffer
   if (buffer.lines.length === 1 && buffer.lines[0] === '') {
     return '';
   }
   return buffer.lines.join('\n');
 }
 
-/**
- * Get the flat offset (index) from a cursor position.
- */
 export function getOffset(buffer: Buffer, cursor: Cursor): number {
   let offset = 0;
   for (let i = 0; i < cursor.line; i++) {
-    offset += buffer.lines[i].length + 1; // +1 for the newline
+    offset += buffer.lines[i].length + 1;
   }
   offset += cursor.column;
   return offset;
 }
 
-/**
- * Get the cursor position from a flat offset.
- */
 export function getCursor(buffer: Buffer, offset: number): Cursor {
   let currentOffset = 0;
   for (let i = 0; i < buffer.lines.length; i++) {
     const lineLength = buffer.lines[i].length;
-    // Check if the offset falls within this line (including the newline character unless it's the last line)
-    // We treat the position *after* the newline as the start of the next line.
-    // Position *at* the end of line (before newline) is valid cursor column.
-
-    // If we are on the last line, we accept up to lineLength
     if (i === buffer.lines.length - 1) {
       if (offset <= currentOffset + lineLength) {
         return { line: i, column: Math.max(0, offset - currentOffset) };
       }
-      // If offset is beyond the content, clamp to end
       return { line: i, column: lineLength };
     }
 
-    // For non-last lines, we account for newline character (+1)
     if (offset <= currentOffset + lineLength) {
       return { line: i, column: Math.max(0, offset - currentOffset) };
     }
 
-    // If offset is exactly at the newline character, it depends on interpretation.
-    // Usually, cursor at the newline means it's at the end of the line.
-    // But if we are "past" the newline, we are on the start of next line.
-    // Logic:
-    // Line 0: "abc" (len 3). Newline at index 3.
-    // Index 0='a', 1='b', 2='c', 3='\n'.
-    // If target offset is 3: That's end of line 0.
-    // If target offset is 4: That's start of line 1.
-    // currentOffset + lineLength is index of newline.
-
-    // If offset == currentOffset + lineLength + 1, we move to next loop
-
     currentOffset += lineLength + 1;
   }
 
-  // Fallback (should have returned in loop)
   const lastLineIdx = buffer.lines.length - 1;
   return { line: lastLineIdx, column: buffer.lines[lastLineIdx].length };
 }

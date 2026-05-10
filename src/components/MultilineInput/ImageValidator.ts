@@ -1,5 +1,5 @@
 import type { ImageRef } from './ImageTypes.js';
-import { generateImageId } from './ImageSentinel.js';
+import { generateBlockId as generateImageId } from './BlockMarker.js';
 
 export interface ValidateImageOptions {
   maxImageSizeBytes?: number;

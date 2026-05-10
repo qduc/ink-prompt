@@ -2,17 +2,32 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { TextRenderer, wrapLines } from '../TextRenderer.js';
-import { createSentinel } from '../ImageSentinel.js';
-import type { ImageRef } from '../ImageTypes.js';
+import { createBlockMarker } from '../BlockMarker.js';
+import type { BlockState } from '../BlockTypes.js';
 import type { Buffer, Cursor } from '../types.js';
 
+function makeBlockState(entries: Array<{ id: string; displayNumber: number }>): BlockState {
+  const map = new Map();
+  for (const e of entries) {
+    map.set(e.id, {
+      kind: 'image' as const,
+      id: e.id,
+      displayNumber: e.displayNumber,
+      data: '',
+      mimeType: 'image/png',
+      byteSize: 100,
+    });
+  }
+  return { entries: map, nextPasteNumber: 1, nextImageNumber: 3 };
+}
+
 describe('TextRenderer with images', () => {
-  const sentinel1 = createSentinel('img1', 1);
-  const sentinel2 = createSentinel('img2', 2);
-  const images: Record<string, ImageRef> = {
-    img1: { id: 'img1', data: '', mimeType: 'image/png', byteSize: 100, displayNumber: 1 },
-    img2: { id: 'img2', data: '', mimeType: 'image/png', byteSize: 100, displayNumber: 2 },
-  };
+  const sentinel1 = createBlockMarker('i', 'img1', 1);
+  const sentinel2 = createBlockMarker('i', 'img2', 2);
+  const blockState = makeBlockState([
+    { id: 'img1', displayNumber: 1 },
+    { id: 'img2', displayNumber: 2 },
+  ]);
 
   describe('wrapLines', () => {
     it('renders normal text unchanged when no sentinels', () => {
@@ -60,7 +75,7 @@ describe('TextRenderer with images', () => {
       const cursor: Cursor = { line: 0, column: sentinel1.length };
 
       const { container } = render(
-        <TextRenderer buffer={buffer} cursor={cursor} images={images} showCursor={false} />
+        <TextRenderer buffer={buffer} cursor={cursor} blockState={blockState} showCursor={false} />
       );
 
       expect(container.textContent).toContain('[Pasted Image #1]');
@@ -71,7 +86,7 @@ describe('TextRenderer with images', () => {
       const cursor: Cursor = { line: 0, column: 0 };
 
       const { container } = render(
-        <TextRenderer buffer={buffer} cursor={cursor} images={images} showCursor={false} />
+        <TextRenderer buffer={buffer} cursor={cursor} blockState={blockState} showCursor={false} />
       );
 
       expect(container.textContent).toContain('[Pasted Image #1]');
@@ -80,10 +95,10 @@ describe('TextRenderer with images', () => {
 
     it('renders cursor before sentinel', () => {
       const buffer: Buffer = { lines: [sentinel1] };
-      const cursor: Cursor = { line: 0, column: 0 }; // before sentinel
+      const cursor: Cursor = { line: 0, column: 0 };
 
       const { container } = render(
-        <TextRenderer buffer={buffer} cursor={cursor} images={images} showCursor={true} />
+        <TextRenderer buffer={buffer} cursor={cursor} blockState={blockState} showCursor={true} />
       );
 
       expect(container.textContent).toContain('[Pasted Image #1]');
@@ -91,10 +106,10 @@ describe('TextRenderer with images', () => {
 
     it('renders cursor after sentinel', () => {
       const buffer: Buffer = { lines: [sentinel1] };
-      const cursor: Cursor = { line: 0, column: sentinel1.length }; // after sentinel
+      const cursor: Cursor = { line: 0, column: sentinel1.length };
 
       const { container } = render(
-        <TextRenderer buffer={buffer} cursor={cursor} images={images} showCursor={true} />
+        <TextRenderer buffer={buffer} cursor={cursor} blockState={blockState} showCursor={true} />
       );
 
       expect(container.textContent).toContain('[Pasted Image #1]');

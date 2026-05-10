@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { Buffer, Cursor, WrapResult, PlaceholderState } from './types.js';
-import type { ImageRef } from './ImageTypes.js';
+import type { Buffer, Cursor, WrapResult } from './types.js';
+import type { BlockState } from './BlockTypes.js';
 import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
 import { getVisualRows } from './TextBuffer.js';
 import { findAtomicBlocks, type AtomicBlock } from './AtomicBlocks.js';
@@ -11,9 +11,8 @@ export interface TextRendererProps {
   cursor: Cursor;
   width?: number;
   showCursor?: boolean;
-  /** Placeholder state for expanding paste markers into display text */
-  placeholderState?: PlaceholderState;
-  images?: Record<string, ImageRef>;
+  /** Block state for expanding markers into display text */
+  blockState?: BlockState;
 }
 
 interface VisualSegment {
@@ -44,7 +43,7 @@ function expandRange(
       if (raw > plainStart) {
         segments.push({ text: line.slice(plainStart, raw), dim: false });
       }
-      segments.push({ text: block.displayText, dim: block.kind === 'sentinel' });
+      segments.push({ text: block.displayText, dim: block.dim });
       raw = block.end;
       plainStart = raw;
     } else {
@@ -86,7 +85,7 @@ export function wrapLines(
   buffer: Buffer,
   cursor: Cursor,
   width: number,
-  placeholders?: PlaceholderState['placeholders']
+  entries?: Map<string, import('./BlockTypes.js').BlockEntry>
 ): WrapResult & { rows: VisualRow[] } {
   const visualLines: string[] = [];
   const rowsOut: VisualRow[] = [];
@@ -98,8 +97,8 @@ export function wrapLines(
   for (let lineIndex = 0; lineIndex < buffer.lines.length; lineIndex++) {
     const rawLine = buffer.lines[lineIndex];
     const isCursorLine = lineIndex === cursor.line;
-    const blocks = findAtomicBlocks(rawLine, placeholders);
-    const rows = getVisualRows(rawLine, safeWidth, placeholders);
+    const blocks = findAtomicBlocks(rawLine, entries);
+    const rows = getVisualRows(rawLine, safeWidth, entries);
 
     if (rawLine.length === 0) {
       visualLines.push('');
@@ -212,12 +211,12 @@ export function TextRenderer({
   cursor,
   width: propWidth,
   showCursor = true,
-  placeholderState,
+  blockState,
 }: TextRendererProps): React.ReactElement {
   const width = useTerminalWidth(propWidth);
-  const placeholders = placeholderState?.placeholders;
+  const entries = blockState?.entries;
 
-  const { rows, cursorVisualRow, cursorVisualCol } = wrapLines(buffer, cursor, width, placeholders);
+  const { rows, cursorVisualRow, cursorVisualCol } = wrapLines(buffer, cursor, width, entries);
 
   return (
     <Box flexDirection="column">

@@ -14,5 +14,4 @@ export type PasteErrorReason =
   | 'too-many-images'
   | 'clipboard-empty';
 
-export const SENTINEL_OPEN = '\uE000';
-export const SENTINEL_CLOSE = '\uE001';
+

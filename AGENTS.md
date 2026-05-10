@@ -54,50 +54,58 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
   - `initLogger()` - Clears any existing log file (call once at app start)
   - Log file location: `$INK_PROMPT_LOG_FILE` env var or `./ink-prompt.debug.log`
 
-**Atomic Blocks (unified marker layer):**
-- `src/components/MultilineInput/AtomicBlocks.ts` — single scanner over both paste-placeholder markers (`Placeholder.ts`) and image sentinels (`ImageSentinel.ts`)
-  - `findAtomicBlocks(line, placeholders?)` returns sorted `AtomicBlock[]` with `{ kind: 'sentinel' | 'placeholder', start, end, displayWidth, displayText, id }`
-  - `findAtomicBlockBefore/After/Spanning(line, offset, placeholders?)` for cursor-side queries
-  - `TextBuffer.getVisualRows`, `moveCursor`, `deleteChar`, `deleteCharForward` consume this — atomic-block skipping (left/right) and atomic-width-aware wrapping (up/down) work for both kinds via the same code path
-  - `TextRenderer.wrapLines` operates on the raw buffer (no pre-expansion shim) and expands blocks at render time into styled segments; sentinels render with `dimColor`
-  - `useTextInput` uses a single `cleanupBlockRegistry(block)` helper to drop the corresponding placeholder or image entry on atomic delete, plus an `applyEdit(fn)` wrapper for the flush-batch + push-to-history boilerplate
+**Unified Block System:**
+- `src/components/MultilineInput/BlockTypes.ts` — shared types for both paste placeholder and image blocks
+  - `BlockKind`: `'paste' | 'image'`
+  - `BlockEntry`: discriminated union (`PasteBlockEntry | ImageBlockEntry`)
+  - `BlockState`: single registry with `entries: Map<string, BlockEntry>`, separate counters for paste and image display numbers (both start at 1)
+
+- `src/components/MultilineInput/BlockMarker.ts` — unified marker format for both block kinds
+  - Format: `\uE000{kind}:{id}:{displayNumber}\uE001` (PUA delimited, `p:` for paste, `i:` for image)
+  - `createBlockMarker(kind, id, displayNumber)` — create a marker string
+  - `parseBlockMarkers(text)` — find all markers in a line (replaces both old `MARKER_REGEX` and `parseSentinels`)
+  - `findBlockMarkerAt/Before/After` — cursor navigation helpers
+  - `removeBlockMarker`, `generateBlockId`, `getBlockPlaceholderText`
+
+- `src/components/MultilineInput/BlockRegistry.ts` — unified registry management
+  - `createPasteBlockEntry(state, originalText, displayText)` — create a paste block with its marker
+  - `createImageBlockEntry(state, imageRef)` — create an image block with its marker
+  - `removeBlock(state, id)` — remove entry from registry
+  - `getValue(lines, entries)` — expand paste markers to original text, pass image markers through
+  - `getDisplayLine`, `bufferColToDisplayCol`, `displayColToBufferCol`, `getValueCursorOffset`, `getCursorFromValueOffset` — all unified for both block kinds
+
+- `src/components/MultilineInput/AtomicBlocks.ts` — single scanner using `parseBlockMarkers`
+  - `findAtomicBlocks(line, entries?)` returns sorted `AtomicBlock[]` with `{ kind: 'paste' | 'image', id, start, end, displayWidth, displayText, dim }`
+  - `dim: true` for image blocks (rendered with `dimColor`), `false` for paste blocks
+  - `findAtomicBlockBefore/After/Spanning(line, offset, entries?)` for cursor-side queries
+  - All consumers (`TextBuffer`, `TextRenderer`, `useTextInput`) use the unified API
+
+**Paste Placeholders (`pasteThreshold`):**
+- When `pasteThreshold` prop is set on MultilineInput, text exceeding this character count (when pasted in a single input event) is replaced with a paste block marker using the unified format
+- `formatPastePlaceholder` prop customizes display text format, receives 1-based `displayNumber`
+- Markers are atomic: backspace/delete remove the entire placeholder, arrow keys skip over them
+- `value` / `onChange` / `onSubmit` return the expanded original text
+
+**Image Paste Support:**
+- Optional feature controlled by `enableImagePaste` prop (default `false`), backward compatible
+- Images use the same unified marker format as paste placeholders (`kind: 'i'`)
+- Rendered as `[Pasted Image #N]` text with `dimColor` styling
+- Image data stored in the same `BlockState` registry, separate display number counter from paste blocks
 
 **Text Wrapping:**
 - Word-aware wrapping: Text wraps at word boundaries (spaces) when possible
 - Long words that exceed the terminal width are hard-wrapped
 - Both rendering (`wrapLines` in TextRenderer) and cursor navigation (`moveCursor` in TextBuffer) use consistent word-aware wrapping logic
-- Sentinel blocks (image placeholders) are atomic — never split across visual rows
-- Visual width of a sentinel block equals its placeholder text length (`[Pasted Image #N]`)
+- Block markers (paste placeholders and image placeholders) are atomic — never split across visual rows
+- Visual width of a block marker equals its placeholder text length
 
 **Undo/Redo History Management:**
 - `useTextInput` hook maintains undo/redo stacks for text edits
 - History is bounded by `historyLimit` option (default: 100 entries) to prevent unbounded memory growth
 - When undo stack exceeds the limit, oldest entries are discarded
-- Each history entry stores a full snapshot of the buffer, cursor, and placeholder state
+- Each history entry stores a full snapshot of the buffer, cursor, and block state
 - Redo stack is cleared whenever a new edit occurs
 - Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
-
-**Paste Placeholders (`pasteThreshold`):**
-- `src/components/MultilineInput/Placeholder.ts` - Utility module for paste placeholder markers
-  - When `pasteThreshold` prop is set on MultilineInput, text exceeding this character count (when pasted in a single input event) is replaced with an atomic placeholder marker
-  - Placeholders use inline markers in the buffer string: `\x00P{id}\x00` (null-byte-delimited, cannot be typed by user)
-  - A separate `PlaceholderState` registry tracks `id → { originalText, displayText }`
-  - The internal buffer stores markers; `value` / `onChange` / `onSubmit` return the expanded original text
-  - `TextRenderer` expands markers to display text (e.g., `[Paste text #1]`) for visual rendering
-  - Placeholders are atomic: backspace/delete remove the entire placeholder, arrow keys skip over them
-  - History snapshots include `PlaceholderState`, so undo/redo preserves placeholders
-  - `formatPastePlaceholder` prop allows customizing display text format
-  - `Placeholder.ts` exports utility functions: `createMarker`, `addPlaceholder`, `removePlaceholder`, `getDisplayLine`, `getValue`, `findPlaceholderAt/Before/After`, `bufferColToDisplayCol`, `displayColToBufferCol`, `getValueCursorOffset`, `getCursorFromValueOffset`
-- Each history entry stores a full snapshot of the buffer, cursor, and images state
-- Redo stack is cleared whenever a new edit occurs
-- Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
-
-**Image Paste Support:**
-- Optional feature controlled by `enableImagePaste` prop (default `false`), backward compatible
-- Images are represented by sentinel placeholders in the text buffer: `\uE000{id}:{displayNumber}\uE001`
-- Sentinels are atomic units — cursor jumps over them, delete/backspace removes the whole block
-- Rendered as `[Pasted Image #N]` text with `dimColor` styling
-- Visual width of a sentinel equals its placeholder text length for correct wrapping
 
 **Clipboard Reader Abstraction:**
 - `src/components/MultilineInput/clipboard/` — platform-specific clipboard readers

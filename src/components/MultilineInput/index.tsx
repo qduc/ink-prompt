@@ -29,10 +29,10 @@ export interface MultilineInputProps {
   pasteThreshold?: number;
   /**
    * Custom formatter for the placeholder display text.
-   * Receives the placeholder ID and should return the display string.
-   * Default: (id) => `[Paste text #${id}]`
+   * Receives the display number (1-based) and should return the display string.
+   * Default: (n) => `[Paste text #${n}]`
    */
-  formatPastePlaceholder?: (id: number) => string;
+  formatPastePlaceholder?: (displayNumber: number) => string;
   images?: ImageRef[];
   onImagesChange?: (images: ImageRef[]) => void;
   onPasteError?: (reason: PasteErrorReason) => void;
@@ -61,21 +61,12 @@ export interface MultilineInputCoreProps {
   pasteThreshold?: number;
   /**
    * Custom formatter for the placeholder display text.
-   * Receives the placeholder ID and should return the display string.
-   * Default: (id) => `[Paste text #${id}]`
+   * Receives the display number (1-based) and should return the display string.
+   * Default: (n) => `[Paste text #${n}]`
    */
-  formatPastePlaceholder?: (id: number) => string;
+  formatPastePlaceholder?: (displayNumber: number) => string;
   images?: ImageRef[];
   onImagesChange?: (images: ImageRef[]) => void;
-}
-
-function imagesToRecord(images?: ImageRef[]): Record<string, ImageRef> {
-  if (!images || images.length === 0) return {};
-  const record: Record<string, ImageRef> = {};
-  for (const img of images) {
-    record[img.id] = img;
-  }
-  return record;
 }
 
 export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
@@ -160,8 +151,7 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
       cursor={textInput.cursor}
       width={width}
       showCursor={showCursor}
-      placeholderState={textInput.placeholderState}
-      images={imagesToRecord(textInput.images)}
+      blockState={textInput.blockState}
     />
   );
 };
@@ -384,8 +374,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
         cursor={textInput.cursor}
         width={terminalWidth}
         showCursor={showCursor}
-        placeholderState={textInput.placeholderState}
-        images={imagesToRecord(textInput.images)}
+        blockState={textInput.blockState}
       />
       {isPasting && (
         <Box>

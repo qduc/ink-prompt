@@ -46,7 +46,7 @@ render(<App />);
 | `onBoundaryArrow` | `(direction: 'up' \| 'down' \| 'left' \| 'right') => void` | | Called when arrow key reaches a boundary |
 | `undoDebounceMs` | `number` | `200` | Milliseconds of inactivity to commit undo batch (`0` = disable) |
 | `pasteThreshold` | `number` | | Max paste length before text is replaced by a placeholder |
-| `formatPastePlaceholder` | `(id: number) => string` | | Custom placeholder display format |
+| `formatPastePlaceholder` | `(displayNumber: number) => string` | | Custom placeholder display format (1-based) |
 | `enableImagePaste` | `boolean` | `false` | Enables image-aware Ctrl+V handling |
 | `images` | `ImageRef[]` | | Controlled image state for pasted images |
 | `onImagesChange` | `(images: ImageRef[]) => void` | | Called when images change |
@@ -77,7 +77,7 @@ replace the pasted content with a compact placeholder for cleaner display.
 <MultilineInput
   onSubmit={(value) => console.log(value)}
   pasteThreshold={200}            // Text >200 chars becomes a placeholder
-  formatPastePlaceholder={(id) => `[Pasted block #${id}]`}  // Optional formatter
+  formatPastePlaceholder={(n) => `[Pasted block #${n}]`}  // Optional formatter
 />
 ```
 

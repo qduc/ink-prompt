@@ -2,11 +2,11 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { MultilineInputCore } from '../index.js';
-import { createSentinel } from '../ImageSentinel.js';
+import { createBlockMarker } from '../BlockMarker.js';
 import type { ImageRef } from '../ImageTypes.js';
 
 describe('MultilineInputCore with images', () => {
-  const sentinel1 = createSentinel('img1', 1);
+  const sentinel1 = createBlockMarker('i', 'img1', 1);
   const img1: ImageRef = {
     id: 'img1',
     data: 'base64data',
@@ -43,8 +43,6 @@ describe('MultilineInputCore with images', () => {
 
   describe('submit with images', () => {
     it('submit passes images when provided via textInput', () => {
-      // We test that the component renders with images correctly
-      // The actual submit behavior with images is tested in useTextInput_images tests
       const { container } = render(
         <MultilineInputCore
           value={sentinel1}
