@@ -93,11 +93,24 @@ describe('createImageBlockEntry', () => {
   it('increments image counter', () => {
     const state = createBlockState();
     const { state: s1 } = createImageBlockEntry(state, makeImageRef({ id: 'a' }));
-    const { state: s2 } = createImageBlockEntry(s1, makeImageRef({ id: 'b' }));
+    const { state: s2 } = createImageBlockEntry(s1, makeImageRef({ id: 'b', displayNumber: 2 }));
 
     expect(s2.nextImageNumber).toBe(3);
     expect(s2.nextPasteNumber).toBe(1);
     expect(s2.entries.size).toBe(2);
+  });
+
+  it('uses image ref displayNumber for marker and counter', () => {
+    const state = createBlockState();
+    const { marker, state: newState } = createImageBlockEntry(
+      state,
+      makeImageRef({ id: 'img5', displayNumber: 5 })
+    );
+
+    expect(marker).toContain(':5');
+    expect(newState.nextImageNumber).toBe(6);
+    const entry = newState.entries.get('img5')!;
+    expect(entry.displayNumber).toBe(5);
   });
 
   it('paste and image counters are independent', () => {

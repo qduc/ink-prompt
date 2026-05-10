@@ -359,14 +359,14 @@ export function useTextInput({
   const setImagesCallback = useCallback((newImages: ImageRef[]) => {
     setBlockState((prev) => {
       const newEntries = new Map(prev.entries);
-      // Remove all existing image entries
       for (const [id, entry] of prev.entries) {
         if (entry.kind === 'image') {
           newEntries.delete(id);
         }
       }
-      // Add new image entries (reusing existing id + displayNumber)
+      let nextImageNumber = prev.nextImageNumber;
       for (const img of newImages) {
+        nextImageNumber = Math.max(nextImageNumber, img.displayNumber + 1);
         newEntries.set(img.id, {
           kind: 'image',
           id: img.id,
@@ -376,7 +376,7 @@ export function useTextInput({
           byteSize: img.byteSize,
         });
       }
-      return { ...prev, entries: newEntries };
+      return { ...prev, entries: newEntries, nextImageNumber };
     });
   }, []);
 

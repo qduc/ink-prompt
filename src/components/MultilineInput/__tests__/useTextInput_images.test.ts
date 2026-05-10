@@ -31,8 +31,8 @@ describe('useTextInput with images', () => {
 
     it('assigns correct displayNumber', () => {
       const { result } = renderHook(() => useTextInput());
-      const img1 = makeImageRef('img1');
-      const img2 = makeImageRef('img2');
+      const img1 = makeImageRef('img1', 1);
+      const img2 = makeImageRef('img2', 2);
 
       act(() => { result.current.insertImage(img1); });
       act(() => { result.current.insertImage(img2); });
@@ -41,6 +41,20 @@ describe('useTextInput with images', () => {
       expect(images).toHaveLength(2);
       expect(images[0].displayNumber).toBe(1);
       expect(images[1].displayNumber).toBe(2);
+    });
+
+    it('continues numbering after controlled images are synced', () => {
+      const { result } = renderHook(() => useTextInput());
+
+      act(() => {
+        result.current.setImages([makeImageRef('img5', 5)]);
+      });
+      act(() => {
+        result.current.insertImage(makeImageRef('img6', 6));
+      });
+
+      expect(result.current.getImages().map((img) => img.displayNumber)).toEqual([5, 6]);
+      expect(result.current.buffer.lines[0]).toContain(createBlockMarker('i', 'img6', 6));
     });
   });
 

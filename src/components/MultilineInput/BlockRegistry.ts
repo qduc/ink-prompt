@@ -34,7 +34,7 @@ export function createImageBlockEntry(
   id?: string
 ): { id: string; marker: string; state: BlockState } {
   const blockId = id || imageRef.id;
-  const displayNumber = state.nextImageNumber;
+  const displayNumber = imageRef.displayNumber;
   const marker = createBlockMarker('i', blockId, displayNumber);
   const newEntries = new Map(state.entries);
   newEntries.set(blockId, {
@@ -48,7 +48,11 @@ export function createImageBlockEntry(
   return {
     id: blockId,
     marker,
-    state: { entries: newEntries, nextPasteNumber: state.nextPasteNumber, nextImageNumber: displayNumber + 1 },
+    state: {
+      entries: newEntries,
+      nextPasteNumber: state.nextPasteNumber,
+      nextImageNumber: Math.max(state.nextImageNumber, displayNumber + 1),
+    },
   };
 }
 
