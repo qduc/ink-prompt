@@ -48,10 +48,13 @@ echo -e "${YELLOW}Version bump suggestions:${NC}"
 echo -e "  ${GREEN}1)${NC} Patch: $PATCH_VERSION (bug fixes)"
 echo -e "  ${GREEN}2)${NC} Minor: $MINOR_VERSION (new features, backwards compatible)"
 echo -e "  ${GREEN}3)${NC} Major: $MAJOR_VERSION (breaking changes)"
-echo -e "  ${GREEN}4)${NC} Custom (enter manually)\n"
+echo -e "  ${GREEN}4)${NC} Custom (enter manually)"
+echo -e "  ${GREEN}5)${NC} Skip version bump (keep package.json at $CURRENT_VERSION)\n"
 
 # Get user choice
-read -p "Select version bump (1-4) or press Ctrl+C to cancel: " choice
+read -p "Select option (1-5) or press Ctrl+C to cancel: " choice
+
+SKIP_VERSION_BUMP=false
 
 case $choice in
   1)
@@ -71,13 +74,21 @@ case $choice in
       exit 1
     fi
     ;;
+  5)
+    SKIP_VERSION_BUMP=true
+    NEW_VERSION=$CURRENT_VERSION
+    ;;
   *)
     echo -e "${RED}Invalid choice${NC}"
     exit 1
     ;;
 esac
 
-echo -e "\n${YELLOW}Selected version:${NC} $NEW_VERSION"
+if [[ "$SKIP_VERSION_BUMP" == true ]]; then
+  echo -e "\n${YELLOW}Selected option:${NC} skip version bump (version stays $NEW_VERSION)"
+else
+  echo -e "\n${YELLOW}Selected version:${NC} $NEW_VERSION"
+fi
 
 # Confirm
 read -p "$(echo -e ${YELLOW}Are you sure you want to release v$NEW_VERSION? \(y/N\): ${NC})" confirm
@@ -88,9 +99,13 @@ fi
 
 echo -e "\n${BLUE}Starting release process...${NC}\n"
 
-# Update package.json version
-echo -e "${BLUE}→${NC} Updating package.json version to $NEW_VERSION"
-npm version $NEW_VERSION --no-git-tag-version
+# Update package.json version (optional)
+if [[ "$SKIP_VERSION_BUMP" == true ]]; then
+  echo -e "${BLUE}→${NC} Skipping package.json version update"
+else
+  echo -e "${BLUE}→${NC} Updating package.json version to $NEW_VERSION"
+  npm version $NEW_VERSION --no-git-tag-version
+fi
 
 # Run tests
 echo -e "${BLUE}→${NC} Running tests..."
@@ -100,41 +115,11 @@ npm test
 echo -e "${BLUE}→${NC} Building..."
 npm run build
 
-# Commit version bump
-echo -e "${BLUE}→${NC} Committing version bump"
-git add package.json package-lock.json
-git commit -m "chore: bump version to $NEW_VERSION"
-
-# Merge to main if not already on main
-if [[ "$CURRENT_BRANCH" != "main" ]]; then
-  echo -e "${BLUE}→${NC} Switching to main branch"
-  git checkout main
-
-  echo -e "${BLUE}→${NC} Pulling latest changes"
-  git pull origin main
-
-  echo -e "${BLUE}→${NC} Merging $CURRENT_BRANCH into main"
-  git merge --no-ff $CURRENT_BRANCH -m "chore: merge $CURRENT_BRANCH for release v$NEW_VERSION"
+# Commit version bump (optional)
+if [[ "$SKIP_VERSION_BUMP" == true ]]; then
+  echo -e "${BLUE}→${NC} Skipping version bump commit"
+else
+  echo -e "${BLUE}→${NC} Committing version bump"
+  git add package.json package-lock.json
+  git commit -m "chore: bump version to $NEW_VERSION"
 fi
-
-# Create tag
-echo -e "${BLUE}→${NC} Creating tag v$NEW_VERSION"
-git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
-
-# Push
-echo -e "${BLUE}→${NC} Pushing to origin"
-git push origin main
-git push origin "v$NEW_VERSION"
-
-echo -e "\n${GREEN}✓ Release v$NEW_VERSION completed successfully!${NC}"
-echo -e "${YELLOW}Note: CI tests will run for the tag. Monitor GitHub Actions.${NC}"
-
-# Switch back to original branch if needed
-if [[ "$CURRENT_BRANCH" != "main" ]]; then
-  echo -e "${BLUE}→${NC} Switching back to $CURRENT_BRANCH"
-  git checkout $CURRENT_BRANCH
-fi
-
-echo -e "\n${BLUE}Next steps:${NC}"
-echo -e "  1. Wait for CI tests to pass on GitHub"
-echo -e "  2. Run: ${GREEN}npm publish${NC} (or ${GREEN}npm publish --access public${NC} for scoped packages)"
