@@ -54,6 +54,14 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
   - `initLogger()` - Clears any existing log file (call once at app start)
   - Log file location: `$INK_PROMPT_LOG_FILE` env var or `./ink-prompt.debug.log`
 
+**Atomic Blocks (unified marker layer):**
+- `src/components/MultilineInput/AtomicBlocks.ts` — single scanner over both paste-placeholder markers (`Placeholder.ts`) and image sentinels (`ImageSentinel.ts`)
+  - `findAtomicBlocks(line, placeholders?)` returns sorted `AtomicBlock[]` with `{ kind: 'sentinel' | 'placeholder', start, end, displayWidth, displayText, id }`
+  - `findAtomicBlockBefore/After/Spanning(line, offset, placeholders?)` for cursor-side queries
+  - `TextBuffer.getVisualRows`, `moveCursor`, `deleteChar`, `deleteCharForward` consume this — atomic-block skipping (left/right) and atomic-width-aware wrapping (up/down) work for both kinds via the same code path
+  - `TextRenderer.wrapLines` operates on the raw buffer (no pre-expansion shim) and expands blocks at render time into styled segments; sentinels render with `dimColor`
+  - `useTextInput` uses a single `cleanupBlockRegistry(block)` helper to drop the corresponding placeholder or image entry on atomic delete, plus an `applyEdit(fn)` wrapper for the flush-batch + push-to-history boilerplate
+
 **Text Wrapping:**
 - Word-aware wrapping: Text wraps at word boundaries (spaces) when possible
 - Long words that exceed the terminal width are hard-wrapped

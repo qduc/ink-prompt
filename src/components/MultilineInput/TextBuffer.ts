@@ -1,6 +1,11 @@
 import type { Buffer, Cursor, Direction } from './types.js';
-import { SENTINEL_OPEN } from './ImageTypes.js';
-import { parseSentinels, findSentinelAt, getPlaceholderVisualWidth } from './ImageSentinel.js';
+import {
+  findAtomicBlocks,
+  findAtomicBlockSpanning,
+  findAtomicBlockBefore,
+  findAtomicBlockAfter,
+  type Placeholders,
+} from './AtomicBlocks.js';
 
 /**
  * Create a new buffer from optional initial text
@@ -59,7 +64,8 @@ export function insertText(
  */
 export function deleteChar(
   buffer: Buffer,
-  cursor: Cursor
+  cursor: Cursor,
+  placeholders?: Placeholders
 ): { buffer: Buffer; cursor: Cursor } {
   const { line, column } = cursor;
 
@@ -84,20 +90,17 @@ export function deleteChar(
     };
   }
 
-  // Check if deleting a sentinel closer - atomically remove whole block
+  // Atomic-block deletion (sentinel or placeholder marker) \u2014 remove the whole block
   const currentLine = buffer.lines[line];
-  const charBefore = currentLine[column - 1];
-  if (charBefore === '\uE001') {
-    const sentinel = findSentinelAt(currentLine, column - 1);
-    if (sentinel) {
-      const newLine = currentLine.slice(0, sentinel.start) + currentLine.slice(sentinel.end);
-      const newLines = [...buffer.lines];
-      newLines[line] = newLine;
-      return {
-        buffer: { lines: newLines },
-        cursor: { line, column: sentinel.start },
-      };
-    }
+  const block = findAtomicBlockBefore(currentLine, column, placeholders);
+  if (block) {
+    const newLine = currentLine.slice(0, block.start) + currentLine.slice(block.end);
+    const newLines = [...buffer.lines];
+    newLines[line] = newLine;
+    return {
+      buffer: { lines: newLines },
+      cursor: { line, column: block.start },
+    };
   }
 
   const newLine = currentLine.slice(0, column - 1) + currentLine.slice(column);
@@ -116,7 +119,8 @@ export function deleteChar(
  */
 export function deleteCharForward(
   buffer: Buffer,
-  cursor: Cursor
+  cursor: Cursor,
+  placeholders?: Placeholders
 ): { buffer: Buffer; cursor: Cursor } {
   const { line, column } = cursor;
   const currentLine = buffer.lines[line];
@@ -142,19 +146,16 @@ export function deleteCharForward(
     };
   }
 
-  // Check if cursor is at a sentinel opener - atomically remove whole block
-  const charAt = currentLine[column];
-  if (charAt === '\uE000') {
-    const sentinel = findSentinelAt(currentLine, column);
-    if (sentinel) {
-      const newLine = currentLine.slice(0, sentinel.start) + currentLine.slice(sentinel.end);
-      const newLines = [...buffer.lines];
-      newLines[line] = newLine;
-      return {
-        buffer: { lines: newLines },
-        cursor,
-      };
-    }
+  // Atomic-block deletion forward (sentinel or placeholder marker) \u2014 remove the whole block
+  const block = findAtomicBlockAfter(currentLine, column, placeholders);
+  if (block) {
+    const newLine = currentLine.slice(0, block.start) + currentLine.slice(block.end);
+    const newLines = [...buffer.lines];
+    newLines[line] = newLine;
+    return {
+      buffer: { lines: newLines },
+      cursor,
+    };
   }
 
   // Delete character after cursor within the line
@@ -213,7 +214,11 @@ function getVisualWidth(char: string): number {
  * Sentinel blocks are atomic: never split, and occupy visual width
  * equal to their placeholder text length.
  */
-export function getVisualRows(line: string, width: number): VisualRowInfo[] {
+export function getVisualRows(
+  line: string,
+  width: number,
+  placeholders?: Placeholders
+): VisualRowInfo[] {
   const safeWidth = Math.max(1, width);
   const rows: VisualRowInfo[] = [];
 
@@ -221,8 +226,10 @@ export function getVisualRows(line: string, width: number): VisualRowInfo[] {
     return [{ start: 0, length: 0 }];
   }
 
-  // Fast path: no sentinels, use original logic
-  if (line.indexOf(SENTINEL_OPEN) === -1) {
+  const blocks = findAtomicBlocks(line, placeholders);
+
+  // Fast path: no atomic blocks
+  if (blocks.length === 0) {
     let offset = 0;
     let remaining = line;
     while (remaining.length > 0) {
@@ -248,24 +255,20 @@ export function getVisualRows(line: string, width: number): VisualRowInfo[] {
     return rows;
   }
 
-  const sentinels = parseSentinels(line);
   let charPos = 0;
   let rowStart = 0;
   let rowVisualWidth = 0;
   let lastSpaceCharPos = -1;
+  let blockIdx = 0;
 
   while (charPos < line.length) {
-    const sentinel = charPos < sentinels.length && sentinels[charPos] !== undefined
-      ? sentinels.find(s => s.start === charPos)
+    while (blockIdx < blocks.length && blocks[blockIdx].start < charPos) blockIdx++;
+    const block = blockIdx < blocks.length && blocks[blockIdx].start === charPos
+      ? blocks[blockIdx]
       : undefined;
 
-    let effectiveSentinel: typeof sentinels[0] | undefined;
-    if (line[charPos] === SENTINEL_OPEN) {
-      effectiveSentinel = sentinels.find(s => s.start === charPos);
-    }
-
-    if (effectiveSentinel) {
-      const svw = getPlaceholderVisualWidth(effectiveSentinel.displayNumber);
+    if (block) {
+      const svw = block.displayWidth;
 
       if (rowVisualWidth > 0 && rowVisualWidth + svw > safeWidth) {
         if (lastSpaceCharPos >= rowStart) {
@@ -283,7 +286,7 @@ export function getVisualRows(line: string, width: number): VisualRowInfo[] {
       }
 
       rowVisualWidth += svw;
-      charPos = effectiveSentinel.end;
+      charPos = block.end;
       lastSpaceCharPos = -1;
       continue;
     }
@@ -330,9 +333,10 @@ export function getVisualRows(line: string, width: number): VisualRowInfo[] {
 function getVisualPosition(
   bufferColumn: number,
   line: string,
-  width: number
+  width: number,
+  placeholders?: Placeholders
 ): { visualRow: number; visualCol: number } {
-  const rows = getVisualRows(line, width);
+  const rows = getVisualRows(line, width, placeholders);
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -364,8 +368,8 @@ function getVisualPosition(
  * Calculate how many visual rows a buffer line takes.
  * Uses word-aware wrapping.
  */
-function getVisualRowCount(line: string, width: number): number {
-  return getVisualRows(line, width).length;
+function getVisualRowCount(line: string, width: number, placeholders?: Placeholders): number {
+  return getVisualRows(line, width, placeholders).length;
 }
 
 /**
@@ -376,9 +380,10 @@ function visualToBufferColumn(
   visualRow: number,
   visualCol: number,
   line: string,
-  width: number
+  width: number,
+  placeholders?: Placeholders
 ): number {
-  const rows = getVisualRows(line, width);
+  const rows = getVisualRows(line, width, placeholders);
   if (visualRow >= rows.length) {
     return line.length;
   }
@@ -393,9 +398,10 @@ function visualToBufferColumn(
 function getVisualRowLength(
   line: string,
   visualRow: number,
-  width: number
+  width: number,
+  placeholders?: Placeholders
 ): number {
-  const rows = getVisualRows(line, width);
+  const rows = getVisualRows(line, width, placeholders);
   if (visualRow >= rows.length) return 0;
   return rows[visualRow].length;
 }
@@ -409,7 +415,8 @@ export function moveCursor(
   buffer: Buffer,
   cursor: Cursor,
   direction: Direction,
-  width?: number
+  width?: number,
+  placeholders?: Placeholders
 ): Cursor {
   const { line, column } = cursor;
   const currentLine = buffer.lines[line];
@@ -418,14 +425,9 @@ export function moveCursor(
   switch (direction) {
     case 'left': {
       if (column > 0) {
-        // If position before cursor is a sentinel closer, jump to before opener
-        const charBefore = currentLine[column - 1];
-        if (charBefore === '\uE001') {
-          const sentinel = findSentinelAt(currentLine, column - 1);
-          if (sentinel) {
-            return { line, column: sentinel.start };
-          }
-        }
+        // If position before cursor is the end of an atomic block, jump to its start
+        const block = findAtomicBlockBefore(currentLine, column, placeholders);
+        if (block) return { line, column: block.start };
         return { line, column: column - 1 };
       }
       // Wrap to end of previous line
@@ -437,14 +439,9 @@ export function moveCursor(
 
     case 'right': {
       if (column < currentLine.length) {
-        // If cursor is immediately before a sentinel opener, jump to after closer
-        const charAt = currentLine[column];
-        if (charAt === '\uE000') {
-          const sentinel = findSentinelAt(currentLine, column);
-          if (sentinel) {
-            return { line, column: sentinel.end };
-          }
-        }
+        // If cursor is at the start of an atomic block, jump past its end
+        const block = findAtomicBlockAfter(currentLine, column, placeholders);
+        if (block) return { line, column: block.end };
         return { line, column: column + 1 };
       }
       // Wrap to start of next line
@@ -456,31 +453,27 @@ export function moveCursor(
 
     case 'up':
       if (width !== undefined) {
-        // Visual-aware movement (word-aware wrapping)
-        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width);
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width, placeholders);
 
         if (visualRow > 0) {
-          // Move to previous visual row within the same buffer line
           const targetVisualRow = visualRow - 1;
-          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width);
+          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width, placeholders);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width) };
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width, placeholders) };
         }
 
-        // At first visual row of current line - move to last visual row of previous buffer line
         if (line > 0) {
           const prevLine = buffer.lines[line - 1];
-          const prevLineVisualRows = getVisualRowCount(prevLine, width);
+          const prevLineVisualRows = getVisualRowCount(prevLine, width, placeholders);
           const targetVisualRow = prevLineVisualRows - 1;
-          const targetVisualRowLength = getVisualRowLength(prevLine, targetVisualRow, width);
+          const targetVisualRowLength = getVisualRowLength(prevLine, targetVisualRow, width, placeholders);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line: line - 1, column: visualToBufferColumn(targetVisualRow, targetVisualCol, prevLine, width) };
+          return { line: line - 1, column: visualToBufferColumn(targetVisualRow, targetVisualCol, prevLine, width, placeholders) };
         }
 
         return cursor;
       }
 
-      // Buffer-line movement (no width provided)
       if (line > 0) {
         const targetLine = buffer.lines[line - 1];
         return { line: line - 1, column: Math.min(column, targetLine.length) };
@@ -489,22 +482,19 @@ export function moveCursor(
 
     case 'down':
       if (width !== undefined) {
-        // Visual-aware movement (word-aware wrapping)
-        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width);
-        const currentLineVisualRows = getVisualRowCount(currentLine, width);
+        const { visualRow, visualCol } = getVisualPosition(column, currentLine, width, placeholders);
+        const currentLineVisualRows = getVisualRowCount(currentLine, width, placeholders);
 
         if (visualRow < currentLineVisualRows - 1) {
-          // Move to next visual row within the same buffer line
           const targetVisualRow = visualRow + 1;
-          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width);
+          const targetVisualRowLength = getVisualRowLength(currentLine, targetVisualRow, width, placeholders);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
-          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width) };
+          return { line, column: visualToBufferColumn(targetVisualRow, targetVisualCol, currentLine, width, placeholders) };
         }
 
-        // At last visual row of current line - move to first visual row of next buffer line
         if (line < lineCount - 1) {
           const nextLine = buffer.lines[line + 1];
-          const targetVisualRowLength = getVisualRowLength(nextLine, 0, width);
+          const targetVisualRowLength = getVisualRowLength(nextLine, 0, width, placeholders);
           const targetVisualCol = Math.min(visualCol, targetVisualRowLength);
           return { line: line + 1, column: Math.min(targetVisualCol, nextLine.length) };
         }

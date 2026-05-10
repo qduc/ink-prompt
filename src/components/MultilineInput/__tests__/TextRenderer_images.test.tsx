@@ -18,7 +18,7 @@ describe('TextRenderer with images', () => {
     it('renders normal text unchanged when no sentinels', () => {
       const buffer: Buffer = { lines: ['hello'] };
       const cursor: Cursor = { line: 0, column: 5 };
-      const result = wrapLines(buffer, cursor, 80, {});
+      const result = wrapLines(buffer, cursor, 80);
 
       expect(result.visualLines).toEqual(['hello']);
       expect(result.cursorVisualRow).toBe(0);
@@ -28,7 +28,7 @@ describe('TextRenderer with images', () => {
     it('renders sentinel placeholder text in visual lines', () => {
       const buffer: Buffer = { lines: [sentinel1] };
       const cursor: Cursor = { line: 0, column: sentinel1.length };
-      const result = wrapLines(buffer, cursor, 80, images);
+      const result = wrapLines(buffer, cursor, 80);
 
       expect(result.visualLines).toEqual(['[Pasted Image #1]']);
       expect(result.cursorVisualRow).toBe(0);
@@ -38,7 +38,7 @@ describe('TextRenderer with images', () => {
     it('renders text around sentinel placeholder', () => {
       const buffer: Buffer = { lines: [`hello ${sentinel1} world`] };
       const cursor: Cursor = { line: 0, column: 0 };
-      const result = wrapLines(buffer, cursor, 80, images);
+      const result = wrapLines(buffer, cursor, 80);
 
       expect(result.visualLines).toEqual(['hello [Pasted Image #1] world']);
     });
@@ -46,7 +46,7 @@ describe('TextRenderer with images', () => {
     it('does not split sentinel placeholder text while wrapping', () => {
       const buffer: Buffer = { lines: [`aa ${sentinel1}`] };
       const cursor: Cursor = { line: 0, column: `aa ${sentinel1}`.length };
-      const result = wrapLines(buffer, cursor, 10, images);
+      const result = wrapLines(buffer, cursor, 10);
 
       expect(result.visualLines).toEqual(['aa', '[Pasted Image #1]']);
       expect(result.cursorVisualRow).toBe(1);

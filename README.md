@@ -36,17 +36,24 @@ render(<App />);
 |------|------|---------|-------------|
 | `value` | `string` | | External control of the text value (controlled mode) |
 | `onChange` | `(value: string) => void` | | Called when text content changes |
-| `onSubmit` | `(value: string) => void` | | Called when Enter is pressed (without trailing `\`) |
+| `onSubmit` | `(value: string, images?: ImageRef[]) => void` | | Called when Enter is pressed (without trailing `\`) |
 | `placeholder` | `string` | | Placeholder text shown when empty and cursor is hidden |
 | `showCursor` | `boolean` | `true` | Whether to display the cursor |
 | `width` | `number` | terminal width | Width for word wrapping (auto-resizes with terminal) |
 | `isActive` | `boolean` | `true` | Whether the input accepts keyboard events |
 | `onCursorChange` | `(offset: number) => void` | | Called when cursor position changes |
 | `cursorOverride` | `number` | | Force cursor to a specific offset |
-| `onBoundaryArrow` | `(dir) => void` | | Called when arrow key reaches a boundary |
+| `onBoundaryArrow` | `(direction: 'up' \| 'down' \| 'left' \| 'right') => void` | | Called when arrow key reaches a boundary |
 | `undoDebounceMs` | `number` | `200` | Milliseconds of inactivity to commit undo batch (`0` = disable) |
 | `pasteThreshold` | `number` | | Max paste length before text is replaced by a placeholder |
 | `formatPastePlaceholder` | `(id: number) => string` | | Custom placeholder display format |
+| `enableImagePaste` | `boolean` | `false` | Enables image-aware Ctrl+V handling |
+| `images` | `ImageRef[]` | | Controlled image state for pasted images |
+| `onImagesChange` | `(images: ImageRef[]) => void` | | Called when images change |
+| `onPasteError` | `(reason: PasteErrorReason) => void` | | Called when paste fails |
+| `maxImageSizeBytes` | `number` | `10485760` | Maximum image size in bytes (default 10 MiB) |
+| `maxImageCount` | `number` | `10` | Maximum number of pasted images |
+| `acceptedMimeTypes` | `string[]` | | Restricts accepted image MIME types |
 
 ### Keyboard Controls
 

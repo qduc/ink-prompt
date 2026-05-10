@@ -7,9 +7,6 @@ import {
   insertNewLine as bufferInsertNewLine,
   moveCursor as bufferMoveCursor,
   getTextContent,
-  getOffset,
-  getCursor,
-  getVisualRows,
 } from './TextBuffer.js';
 import type { Buffer, Cursor, Direction, PlaceholderState } from './types.js';
 import type { ImageRef } from './ImageTypes.js';
@@ -20,14 +17,9 @@ import {
   getValue,
   getValueCursorOffset,
   getCursorFromValueOffset,
-  getDisplayLine,
-  bufferColToDisplayCol,
-  displayColToBufferCol,
-  findPlaceholderAt,
-  findPlaceholderAfter,
-  findPlaceholderBefore,
 } from './Placeholder.js';
-import { createSentinel, parseSentinels, findSentinelAt } from './ImageSentinel.js';
+import { createSentinel, parseSentinels } from './ImageSentinel.js';
+import { findAtomicBlockBefore, findAtomicBlockAfter } from './AtomicBlocks.js';
 import { log } from '../../utils/logger.js';
 
 export interface UseTextInputProps {
@@ -175,6 +167,20 @@ export function useTextInput({
     };
   }, [clearPendingInsertTimer]);
 
+  /** Run a buffer-mutating edit with history bookkeeping (flush batch + push undo). */
+  const applyEdit = useCallback(
+    (edit: () => { buffer: Buffer; cursor: Cursor } | void) => {
+      flushPendingInsertBatch();
+      pushToHistory(buffer, cursor);
+      const result = edit();
+      if (result) {
+        setBuffer(result.buffer);
+        setCursor(result.cursor);
+      }
+    },
+    [buffer, cursor, flushPendingInsertBatch, pushToHistory]
+  );
+
   const insert = useCallback(
     (char: string) => {
       log(`[INSERT] char="${char.replace(/[\x00-\x1F\x7F-￿]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" len=${char.length} cursor={line:${cursor.line},col:${cursor.column}} linesBefore=${buffer.lines.length}`);
@@ -220,176 +226,51 @@ export function useTextInput({
     [beginOrRefreshInsertBatch, buffer, cursor, flushPendingInsertBatch, pushToHistory, undoDebounceMs, pasteThreshold, placeholderState, formatPastePlaceholder]
   );
 
-  const deleteChar = useCallback(() => {
-    flushPendingInsertBatch();
-    pushToHistory(buffer, cursor);
-
-    const line = buffer.lines[cursor.line];
-
-    // Check if deleting a paste placeholder marker
-    const placeholder = findPlaceholderBefore(line, cursor.column);
-    if (placeholder) {
-      const newLine = line.slice(0, placeholder.start) + line.slice(placeholder.end);
-      const newLines = [...buffer.lines];
-      newLines[cursor.line] = newLine;
-      setBuffer({ lines: newLines });
-      setCursor({ line: cursor.line, column: placeholder.start });
-      setPlaceholderState(prev => removePlaceholder(prev, placeholder.id));
-      return;
-    }
-
-    // Check if deleting a sentinel (image)
-    if (cursor.column > 0 && line[cursor.column - 1] === '') {
-      const sentinel = findSentinelAt(line, cursor.column - 1);
-      if (sentinel && images[sentinel.id]) {
-        const newImages = { ...images };
-        delete newImages[sentinel.id];
-        setImages(newImages);
+  const cleanupBlockRegistry = useCallback(
+    (block: ReturnType<typeof findAtomicBlockBefore>) => {
+      if (!block) return;
+      if (block.kind === 'placeholder') {
+        setPlaceholderState((prev) => removePlaceholder(prev, block.id));
+      } else if (block.kind === 'sentinel' && images[block.id]) {
+        const next = { ...images };
+        delete next[block.id];
+        setImages(next);
       }
-    }
+    },
+    [images]
+  );
 
-    const result = bufferDeleteChar(buffer, cursor);
-    setBuffer(result.buffer);
-    setCursor(result.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory, images, placeholderState]);
+  const deleteChar = useCallback(() => {
+    applyEdit(() => {
+      const line = buffer.lines[cursor.line];
+      cleanupBlockRegistry(findAtomicBlockBefore(line, cursor.column, placeholderState.placeholders));
+      return bufferDeleteChar(buffer, cursor, placeholderState.placeholders);
+    });
+  }, [applyEdit, buffer, cursor, placeholderState, cleanupBlockRegistry]);
 
   const deleteCharForward = useCallback(() => {
-    flushPendingInsertBatch();
-    pushToHistory(buffer, cursor);
-
-    const line = buffer.lines[cursor.line];
-
-    // Check if deleting a paste placeholder marker
-    const placeholder = findPlaceholderAfter(line, cursor.column);
-    if (placeholder) {
-      const newLine = line.slice(0, placeholder.start) + line.slice(placeholder.end);
-      const newLines = [...buffer.lines];
-      newLines[cursor.line] = newLine;
-      setBuffer({ lines: newLines });
-      setPlaceholderState(prev => removePlaceholder(prev, placeholder.id));
-      return;
-    }
-
-    // Check if deleting a sentinel (image)
-    if (cursor.column < line.length && line[cursor.column] === '') {
-      const sentinel = findSentinelAt(line, cursor.column);
-      if (sentinel && images[sentinel.id]) {
-        const newImages = { ...images };
-        delete newImages[sentinel.id];
-        setImages(newImages);
-      }
-    }
-
-    const result = bufferDeleteCharForward(buffer, cursor);
-    setBuffer(result.buffer);
-    setCursor(result.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory, images, placeholderState]);
+    applyEdit(() => {
+      const line = buffer.lines[cursor.line];
+      cleanupBlockRegistry(findAtomicBlockAfter(line, cursor.column, placeholderState.placeholders));
+      return bufferDeleteCharForward(buffer, cursor, placeholderState.placeholders);
+    });
+  }, [applyEdit, buffer, cursor, placeholderState, cleanupBlockRegistry]);
 
   const newLine = useCallback(() => {
-    flushPendingInsertBatch();
-    pushToHistory(buffer, cursor);
-    const result = bufferInsertNewLine(buffer, cursor);
-    setBuffer(result.buffer);
-    setCursor(result.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
+    applyEdit(() => bufferInsertNewLine(buffer, cursor));
+  }, [applyEdit, buffer, cursor]);
 
   const deleteAndNewLine = useCallback(() => {
-    flushPendingInsertBatch();
-    pushToHistory(buffer, cursor);
-    const afterDelete = bufferDeleteChar(buffer, cursor);
-    const afterNewLine = bufferInsertNewLine(afterDelete.buffer, afterDelete.cursor);
-    setBuffer(afterNewLine.buffer);
-    setCursor(afterNewLine.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
+    applyEdit(() => {
+      const afterDelete = bufferDeleteChar(buffer, cursor, placeholderState.placeholders);
+      return bufferInsertNewLine(afterDelete.buffer, afterDelete.cursor);
+    });
+  }, [applyEdit, buffer, cursor, placeholderState]);
 
   const moveCursor = useCallback(
     (direction: Direction) => {
       flushPendingInsertBatch();
-
-      let newCursor = bufferMoveCursor(buffer, cursor, direction, width);
-
-      // Handle placeholder markers: skip over them for left/right
-      if (placeholderState.placeholders.size > 0) {
-        if (direction === 'left' || direction === 'right') {
-          const marker = findPlaceholderAt(buffer.lines[newCursor.line], newCursor.column);
-          if (marker) {
-            newCursor = {
-              ...newCursor,
-              column: direction === 'left' ? marker.start : marker.end,
-            };
-          }
-        }
-
-        // For up/down with visual-aware navigation, use display-space conversion
-        if ((direction === 'up' || direction === 'down') && width !== undefined) {
-          const { line, column } = newCursor;
-          const currentLine = buffer.lines[line];
-          const displayLine = getDisplayLine(currentLine, placeholderState.placeholders);
-          const displayCol = bufferColToDisplayCol(currentLine, column, placeholderState.placeholders);
-          const rows = getVisualRows(displayLine, width);
-
-          const getVisualPos = (col: number, str: string) => {
-            const r = getVisualRows(str, width);
-            for (let i = 0; i < r.length; i++) {
-              const rowEnd = r[i].start + r[i].length;
-              if (col >= r[i].start && col < rowEnd) {
-                return { visualRow: i, visualCol: col - r[i].start };
-              }
-              if (col === rowEnd && i === r.length - 1) {
-                return { visualRow: i, visualCol: r[i].length };
-              }
-            }
-            for (let i = 0; i < r.length; i++) {
-              if (col === r[i].start + r[i].length && i < r.length - 1) {
-                return { visualRow: i + 1, visualCol: 0 };
-              }
-            }
-            const lastRow = r[r.length - 1];
-            return { visualRow: r.length - 1, visualCol: lastRow.length };
-          };
-
-          const visualPos = getVisualPos(displayCol, displayLine);
-          const displayRowCount = rows.length;
-
-          if (direction === 'up') {
-            if (visualPos.visualRow > 0) {
-              const targetVisRow = visualPos.visualRow - 1;
-              const targetVisRowLen = targetVisRow < rows.length ? rows[targetVisRow].length : 0;
-              const targetVisCol = Math.min(visualPos.visualCol, targetVisRowLen);
-              const targetDispCol = Math.min(rows[targetVisRow].start + targetVisCol, displayLine.length);
-              const targetBufCol = displayColToBufferCol(currentLine, targetDispCol, placeholderState.placeholders);
-              newCursor = { line, column: targetBufCol };
-            } else if (line > 0) {
-              const prevLine = buffer.lines[line - 1];
-              const prevDisplayLine = getDisplayLine(prevLine, placeholderState.placeholders);
-              const prevRows = getVisualRows(prevDisplayLine, width);
-              const targetVisRow = prevRows.length - 1;
-              const targetVisRowLen = targetVisRow >= 0 ? prevRows[targetVisRow].length : 0;
-              const targetVisCol = Math.min(visualPos.visualCol, targetVisRowLen);
-              const targetDispCol = targetVisRow >= 0 ? Math.min(prevRows[targetVisRow].start + targetVisCol, prevDisplayLine.length) : 0;
-              const targetBufCol = displayColToBufferCol(prevLine, targetDispCol, placeholderState.placeholders);
-              newCursor = { line: line - 1, column: targetBufCol };
-            }
-          } else {
-            if (visualPos.visualRow < displayRowCount - 1) {
-              const targetVisRow = visualPos.visualRow + 1;
-              const targetVisRowLen = targetVisRow < rows.length ? rows[targetVisRow].length : 0;
-              const targetVisCol = Math.min(visualPos.visualCol, targetVisRowLen);
-              const targetDispCol = Math.min(rows[targetVisRow].start + targetVisCol, displayLine.length);
-              const targetBufCol = displayColToBufferCol(currentLine, targetDispCol, placeholderState.placeholders);
-              newCursor = { line, column: targetBufCol };
-            } else if (line < buffer.lines.length - 1) {
-              const nextLine = buffer.lines[line + 1];
-              const nextDisplayLine = getDisplayLine(nextLine, placeholderState.placeholders);
-              const firstRowLen = nextDisplayLine.length > 0 ? (getVisualRows(nextDisplayLine, width)[0]?.length ?? 0) : 0;
-              const targetVisCol = Math.min(visualPos.visualCol, firstRowLen);
-              const targetBufCol = displayColToBufferCol(nextLine, targetVisCol, placeholderState.placeholders);
-              newCursor = { line: line + 1, column: targetBufCol };
-            }
-          }
-        }
-      }
-
+      const newCursor = bufferMoveCursor(buffer, cursor, direction, width, placeholderState.placeholders);
       setCursor(newCursor);
     },
     [buffer, cursor, flushPendingInsertBatch, width, placeholderState]
@@ -442,51 +323,39 @@ export function useTextInput({
 
   const setText = useCallback(
     (text: string) => {
-      flushPendingInsertBatch();
-      pushToHistory(buffer, cursor);
-      const newBuffer = createBuffer(text);
-      setBuffer(newBuffer);
-      setPlaceholderState(createPlaceholderState());
+      applyEdit(() => {
+        setPlaceholderState(createPlaceholderState());
+        const newBuffer = createBuffer(text);
+        const lines = text.split('\n');
+        const newCursor = { line: lines.length - 1, column: lines[lines.length - 1].length };
 
-      const lines = text.split('\n');
-      setCursor({
-        line: lines.length - 1,
-        column: lines[lines.length - 1].length,
-      });
-
-      // Clean up orphaned images
-      const fullText = getTextContent(newBuffer);
-      const sentinels = parseSentinels(fullText);
-      const usedIds = new Set(sentinels.map(s => s.id));
-      setImages((prev) => {
-        const next: Record<string, ImageRef> = {};
-        for (const [id, ref] of Object.entries(prev)) {
-          if (usedIds.has(id)) {
-            next[id] = ref;
+        // Clean up orphaned images
+        const usedIds = new Set(parseSentinels(getTextContent(newBuffer)).map((s) => s.id));
+        setImages((prev) => {
+          const next: Record<string, ImageRef> = {};
+          for (const [id, ref] of Object.entries(prev)) {
+            if (usedIds.has(id)) next[id] = ref;
           }
-        }
-        return next;
+          return next;
+        });
+
+        return { buffer: newBuffer, cursor: newCursor };
       });
     },
-    [buffer, cursor, flushPendingInsertBatch, pushToHistory]
+    [applyEdit]
   );
 
   const insertImage = useCallback(
     (imageRef: ImageRef) => {
-      flushPendingInsertBatch();
-      pushToHistory(buffer, cursor);
-
-      const sentinel = createSentinel(imageRef.id, imageRef.displayNumber);
-      const result = bufferInsertText(buffer, cursor, sentinel);
-      setBuffer(result.buffer);
-      setCursor(result.cursor);
-      setImages((prev) => ({ ...prev, [imageRef.id]: imageRef }));
-
-      if (imageRef.displayNumber >= nextDisplayNumberRef.current) {
-        nextDisplayNumberRef.current = imageRef.displayNumber + 1;
-      }
+      applyEdit(() => {
+        setImages((prev) => ({ ...prev, [imageRef.id]: imageRef }));
+        if (imageRef.displayNumber >= nextDisplayNumberRef.current) {
+          nextDisplayNumberRef.current = imageRef.displayNumber + 1;
+        }
+        return bufferInsertText(buffer, cursor, createSentinel(imageRef.id, imageRef.displayNumber));
+      });
     },
-    [buffer, cursor, flushPendingInsertBatch, pushToHistory]
+    [applyEdit, buffer, cursor]
   );
 
   const value = useMemo(
