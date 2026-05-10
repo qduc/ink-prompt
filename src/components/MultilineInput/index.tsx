@@ -4,66 +4,22 @@ import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
 import { useTextInput } from './useTextInput.js';
 import { handleKey, KeyHandlerActions } from './KeyHandler.js';
 import { TextRenderer } from './TextRenderer.js';
+import { createBuffer } from './TextBuffer.js';
+import { useClipboardPaste } from './useClipboardPaste.js';
+import type { ImageRef, PasteErrorReason } from './ImageTypes.js';
 import { log } from '../../utils/logger.js';
 
 export interface MultilineInputProps {
-  /**
-   * Controlled text value. When provided, the component becomes controlled
-   * and the value is managed externally.
-   */
   value?: string;
-  /**
-   * Called when the text content changes due to user input. Receives the
-   * new text value as a parameter.
-   */
   onChange?: (value: string) => void;
-  /**
-   * Called when the user submits the input (typically by pressing Enter
-   * without a backslash at the end). Receives the final text value.
-   */
-  onSubmit?: (value: string) => void;
-  /**
-   * Placeholder text displayed when the input is empty and the cursor
-   * is not shown.
-   */
+  onSubmit?: (value: string, images?: ImageRef[]) => void;
   placeholder?: string;
-  /**
-   * Whether to display the cursor. Defaults to true.
-   */
   showCursor?: boolean;
-  /**
-   * Terminal width for word wrapping. If not provided, uses the terminal's
-   * current width with resize support.
-   */
   width?: number;
-  /**
-   * Whether the input is active and focused, allowing keyboard input.
-   * Defaults to true.
-   */
   isActive?: boolean;
-  /**
-   * Called whenever the cursor position changes. Receives the flat
-   * character offset as a parameter.
-   */
   onCursorChange?: (offset: number) => void;
-  /**
-   * Optional external cursor position override. When set, forces the
-   * cursor to the specified flat character offset.
-   */
   cursorOverride?: number;
-  /**
-   * Called when an arrow key is pressed but cursor is at a boundary.
-   * - 'up': cursor is on the first/topmost line
-   * - 'down': cursor is on the last/bottommost line
-   * - 'left': cursor is at position 0 (start of text)
-   * - 'right': cursor is at end of text (after last character)
-   */
   onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
-  /**
-   * Batches consecutive single-character inserts into a single undo step.
-   * The batch is committed after this many milliseconds of inactivity (default: 200).
-   * Set to 0 to disable batching (undo will be per edit again).
-   */
   undoDebounceMs?: number;
   /**
    * When set, pasted text exceeding this character count is replaced
@@ -77,65 +33,25 @@ export interface MultilineInputProps {
    * Default: (id) => `[Paste text #${id}]`
    */
   formatPastePlaceholder?: (id: number) => string;
+  images?: ImageRef[];
+  onImagesChange?: (images: ImageRef[]) => void;
+  onPasteError?: (reason: PasteErrorReason) => void;
+  enableImagePaste?: boolean;
+  maxImageSizeBytes?: number;
+  maxImageCount?: number;
+  acceptedMimeTypes?: string[];
 }
 
-/**
- * Props for the core component (without Ink-specific hooks)
- * This allows testing the rendering logic separately.
- */
 export interface MultilineInputCoreProps {
-  /**
-   * Controlled text value. When provided, the component becomes controlled
-   * and the text is managed externally.
-   */
   value?: string;
-  /**
-   * Called when the text content changes. Receives the new text value
-   * as a parameter.
-   */
   onChange?: (value: string) => void;
-  /**
-   * Called when the user submits the input (typically by pressing Enter
-   * without a backslash at the end).
-   */
-  onSubmit?: (value: string) => void;
-  /**
-   * Placeholder text displayed when the input is empty and the cursor
-   * is not shown.
-   */
+  onSubmit?: (value: string, images?: ImageRef[]) => void;
   placeholder?: string;
-  /**
-   * Whether to display the cursor. Defaults to true.
-   */
   showCursor?: boolean;
-  /**
-   * Terminal width for word wrapping. If not provided, uses the terminal's
-   * current width.
-   */
   width?: number;
-  /**
-   * Called whenever the cursor position changes. Receives the flat
-   * character offset as a parameter.
-   */
   onCursorChange?: (offset: number) => void;
-  /**
-   * Optional external cursor position override. When set, forces the
-   * cursor to the specified flat character offset.
-   */
   cursorOverride?: number;
-  /**
-   * Called when an arrow key is pressed but cursor is at a boundary.
-   * - 'up': cursor is on the first/topmost line
-   * - 'down': cursor is on the last/bottommost line
-   * - 'left': cursor is at position 0 (start of text)
-   * - 'right': cursor is at end of text (after last character)
-   */
   onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
-  /**
-   * Batches consecutive single-character inserts into a single undo step.
-   * The batch is committed after this many milliseconds of inactivity (default: 200).
-   * Set to 0 to disable batching (undo will be per edit again).
-   */
   undoDebounceMs?: number;
   /**
    * When set, pasted text exceeding this character count is replaced
@@ -149,12 +65,19 @@ export interface MultilineInputCoreProps {
    * Default: (id) => `[Paste text #${id}]`
    */
   formatPastePlaceholder?: (id: number) => string;
+  images?: ImageRef[];
+  onImagesChange?: (images: ImageRef[]) => void;
 }
 
-/**
- * Core rendering component that can be tested without Ink runtime.
- * Does not include useInput/useStdout hooks.
- */
+function imagesToRecord(images?: ImageRef[]): Record<string, ImageRef> {
+  if (!images || images.length === 0) return {};
+  const record: Record<string, ImageRef> = {};
+  for (const img of images) {
+    record[img.id] = img;
+  }
+  return record;
+}
+
 export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   value,
   onChange,
@@ -166,21 +89,19 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   undoDebounceMs,
   pasteThreshold,
   formatPastePlaceholder,
+  images,
+  onImagesChange,
 }) => {
   const textInput = useTextInput({ initialValue: value ?? '', undoDebounceMs, pasteThreshold, formatPastePlaceholder });
 
-  // Track whether a value change is from syncing props (not user input)
   const isSyncingFromProps = useRef(false);
 
-  // Handle cursor override
   useEffect(() => {
     if (cursorOverride !== undefined) {
       textInput.setCursorOffset(cursorOverride);
     }
   }, [cursorOverride]);
 
-  // Notify parent of cursor change
-  // Use a ref to avoid dependency on onCursorChange callback identity
   const onCursorChangeRef = useRef(onCursorChange);
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
@@ -192,8 +113,6 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
     }
   }, [textInput.cursorOffset]);
 
-
-  // Sync external value changes
   useEffect(() => {
     if (value !== undefined && value !== textInput.value) {
       isSyncingFromProps.current = true;
@@ -201,7 +120,6 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
     }
   }, [value]);
 
-  // Notify parent of changes - but only for user-initiated changes
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -209,14 +127,26 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
 
   useEffect(() => {
     if (isSyncingFromProps.current) {
-      // This change was from syncing props, not user input - don't call onChange
       isSyncingFromProps.current = false;
       return;
     }
     onChangeRef.current?.(textInput.value);
   }, [textInput.value]);
 
-  // Show placeholder if empty and no cursor shown
+  // Sync controlled images
+  useEffect(() => {
+    if (images !== undefined) {
+      textInput.setImages(images);
+    }
+  }, [images]);
+
+  // Notify parent of image changes
+  useEffect(() => {
+    if (onImagesChange) {
+      onImagesChange(textInput.images);
+    }
+  }, [onImagesChange, textInput.images]);
+
   const isEmpty = textInput.value === '';
   const showPlaceholder = isEmpty && placeholder && !showCursor;
 
@@ -231,14 +161,11 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
       width={width}
       showCursor={showCursor}
       placeholderState={textInput.placeholderState}
+      images={imagesToRecord(textInput.images)}
     />
   );
 };
 
-/**
- * Full MultilineInput with Ink keyboard handling.
- * This component uses Ink-specific hooks and must be rendered in an Ink context.
- */
 export const MultilineInput: React.FC<MultilineInputProps> = ({
   value,
   onChange,
@@ -253,16 +180,20 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   undoDebounceMs,
   pasteThreshold,
   formatPastePlaceholder,
+  images,
+  onImagesChange,
+  onPasteError,
+  enableImagePaste = false,
+  maxImageSizeBytes,
+  maxImageCount,
+  acceptedMimeTypes,
 }) => {
 
-  // Get terminal width from Ink (with resize support) if not provided
   const terminalWidth = useTerminalWidth(width);
 
-  // Track raw input for detecting Home/End keys
   const { stdin } = useStdin();
   const lastRawInput = useRef<string>('');
 
-  // Listen for raw stdin data to capture escape sequences
   useEffect(() => {
     if (!stdin || !isActive) return;
 
@@ -278,14 +209,21 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
 
   const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth, undoDebounceMs, pasteThreshold, formatPastePlaceholder });
 
-  // Handle cursor override
+  const { isPasting, paste: clipboardPaste } = useClipboardPaste({
+    enableImagePaste,
+    maxImageSizeBytes,
+    maxImageCount,
+    acceptedMimeTypes,
+    existingImages: textInput.images,
+    onPasteError,
+  });
+
   useEffect(() => {
     if (cursorOverride !== undefined) {
       textInput.setCursorOffset(cursorOverride);
     }
   }, [cursorOverride]);
 
-  // Notify parent of cursor change
   const onCursorChangeRef = useRef(onCursorChange);
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
@@ -295,10 +233,8 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     onCursorChangeRef.current?.(textInput.cursorOffset);
   }, [textInput.cursorOffset]);
 
-  // Track whether a value change is from syncing props (not user input)
   const isSyncingFromProps = useRef(false);
 
-  // Sync external value changes
   useEffect(() => {
     if (value !== undefined && value !== textInput.value) {
       isSyncingFromProps.current = true;
@@ -306,7 +242,6 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     }
   }, [value]);
 
-  // Notify parent of changes - but only for user-initiated changes
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -314,20 +249,46 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
 
   useEffect(() => {
     if (isSyncingFromProps.current) {
-      // This change was from syncing props, not user input - don't call onChange
       isSyncingFromProps.current = false;
       return;
     }
     onChangeRef.current?.(textInput.value);
   }, [textInput.value]);
 
-  // Create submit handler
-  const handleSubmit = useCallback(() => {
-    onSubmit?.(textInput.value);
-    textInput.setText(''); // Clear input after submit
-  }, [onSubmit, textInput.value, textInput.setText]);
+  // Sync controlled images
+  useEffect(() => {
+    if (images !== undefined) {
+      textInput.setImages(images);
+    }
+  }, [images]);
 
-  // Create actions for KeyHandler
+  // Notify parent of image changes
+  const onImagesChangeRef = useRef(onImagesChange);
+  useEffect(() => {
+    onImagesChangeRef.current = onImagesChange;
+  }, [onImagesChange]);
+
+  useEffect(() => {
+    if (onImagesChangeRef.current) {
+      onImagesChangeRef.current(textInput.images);
+    }
+  }, [textInput.images]);
+
+  const handleSubmit = useCallback(() => {
+    onSubmit?.(textInput.value, textInput.images);
+    textInput.setText('');
+  }, [onSubmit, textInput.value, textInput.setText, textInput.images]);
+
+  const handlePaste = useCallback(() => {
+    clipboardPaste().then((result) => {
+      if (result.kind === 'text') {
+        textInput.insert(result.value);
+      } else if (result.kind === 'image') {
+        textInput.insertImage(result.imageRef);
+      }
+    });
+  }, [clipboardPaste, textInput]);
+
   const actions: KeyHandlerActions = {
     insert: textInput.insert,
     delete: textInput.delete,
@@ -340,19 +301,18 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     setText: textInput.setText,
     submit: handleSubmit,
     onBoundaryArrow,
+    paste: handlePaste,
   };
 
-  // Handle keyboard input
   useInput((input: string, key: any) => {
-    log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
+    log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-￿]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
     handleKey(key, input, textInput.buffer, actions, textInput.cursor, lastRawInput.current, terminalWidth);
   }, { isActive });
 
-  // Show placeholder if empty and no cursor shown
   const isEmpty = textInput.value === '';
   const showPlaceholder = isEmpty && placeholder && !showCursor;
 
-  if (showPlaceholder) {
+  if (showPlaceholder && !isPasting) {
     return (
       <Box>
         <Text dimColor>{placeholder}</Text>
@@ -361,12 +321,20 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   }
 
   return (
-    <TextRenderer
-      buffer={textInput.buffer}
-      cursor={textInput.cursor}
-      width={terminalWidth}
-      showCursor={showCursor}
-      placeholderState={textInput.placeholderState}
-    />
+    <Box flexDirection="column">
+      <TextRenderer
+        buffer={textInput.buffer}
+        cursor={textInput.cursor}
+        width={terminalWidth}
+        showCursor={showCursor}
+        placeholderState={textInput.placeholderState}
+        images={imagesToRecord(textInput.images)}
+      />
+      {isPasting && (
+        <Box>
+          <Text dimColor>Reading clipboard...</Text>
+        </Box>
+      )}
+    </Box>
   );
 };

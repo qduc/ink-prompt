@@ -3,9 +3,10 @@ import { type UseTextInputResult } from './useTextInput.js';
 import { getVisualRows } from './TextBuffer.js';
 import { log } from '../../utils/logger.js';
 
-export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor' | 'cursorOffset' | 'setCursorOffset' | 'buffer' | 'placeholderState'> {
+export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor' | 'cursorOffset' | 'setCursorOffset' | 'buffer' | 'placeholderState' | 'insertImage' | 'images' | 'getImages' | 'setImages'> {
   submit: () => void;
   onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
+  paste?: () => void;
 }
 
 /**
@@ -223,8 +224,12 @@ export function handleKey(
     return;
   }
 
-  // History
+  // Paste / History
   if (key.ctrl) {
+    if (input === 'v' && actions.paste) {
+      actions.paste();
+      return;
+    }
     if (input === 'z') {
       actions.undo();
       return;

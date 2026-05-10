@@ -12,6 +12,7 @@ import {
   getVisualRows,
 } from './TextBuffer.js';
 import type { Buffer, Cursor, Direction, PlaceholderState } from './types.js';
+import type { ImageRef } from './ImageTypes.js';
 import {
   createPlaceholderState,
   addPlaceholder,
@@ -26,18 +27,13 @@ import {
   findPlaceholderAfter,
   findPlaceholderBefore,
 } from './Placeholder.js';
+import { createSentinel, parseSentinels, findSentinelAt } from './ImageSentinel.js';
 import { log } from '../../utils/logger.js';
 
 export interface UseTextInputProps {
   initialValue?: string;
-  /** Terminal width for visual-aware cursor navigation (up/down arrows respect line wrapping) */
   width?: number;
-  /** Maximum number of history entries to keep (default: 100) */
   historyLimit?: number;
-  /**
-   * When > 0, consecutive single-character inserts are batched into a single undo step.
-   * A batch is committed after this many milliseconds of inactivity (default: 200).
-   */
   undoDebounceMs?: number;
   /**
    * When set, pasted text exceeding this character count is replaced
@@ -67,12 +63,17 @@ export interface UseTextInputResult {
   cursorOffset: number;
   setCursorOffset: (offset: number) => void;
   placeholderState: PlaceholderState;
+  insertImage: (imageRef: ImageRef) => void;
+  images: ImageRef[];
+  getImages: () => ImageRef[];
+  setImages: (images: ImageRef[]) => void;
 }
 
 interface HistoryState {
   buffer: Buffer;
   cursor: Cursor;
   placeholderState: PlaceholderState;
+  images: Record<string, ImageRef>;
 }
 
 const defaultFormatPlaceholder = (id: number) => `[Paste text #${id}]`;
@@ -94,6 +95,8 @@ export function useTextInput({
     };
   });
   const [placeholderState, setPlaceholderState] = useState<PlaceholderState>(() => createPlaceholderState());
+  const [images, setImages] = useState<Record<string, ImageRef>>({});
+  const nextDisplayNumberRef = useRef(1);
 
   const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
@@ -143,12 +146,13 @@ export function useTextInput({
       pendingInsertBatchRef.current.startState = {
         buffer: currentBuffer,
         cursor: currentCursor,
-        placeholderState: placeholderState,
+        placeholderState,
+        images,
       };
       setRedoStack([]);
     }
     schedulePendingInsertCommit();
-  }, [schedulePendingInsertCommit, placeholderState]);
+  }, [schedulePendingInsertCommit, placeholderState, images]);
 
   const flushPendingInsertBatch = useCallback(() => {
     commitPendingInsertBatch();
@@ -158,10 +162,11 @@ export function useTextInput({
     appendUndoState({
       buffer: currentBuffer,
       cursor: currentCursor,
-      placeholderState: placeholderState,
+      placeholderState,
+      images,
     });
     setRedoStack([]);
-  }, [appendUndoState, placeholderState]);
+  }, [appendUndoState, placeholderState, images]);
 
   useEffect(() => {
     return () => {
@@ -172,7 +177,7 @@ export function useTextInput({
 
   const insert = useCallback(
     (char: string) => {
-      log(`[INSERT] char="${char.replace(/[\x00-\x1F\x7F-\uFFFF]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" len=${char.length} cursor={line:${cursor.line},col:${cursor.column}} linesBefore=${buffer.lines.length}`);
+      log(`[INSERT] char="${char.replace(/[\x00-\x1F\x7F-￿]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" len=${char.length} cursor={line:${cursor.line},col:${cursor.column}} linesBefore=${buffer.lines.length}`);
 
       const normalized = char.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\x00/g, '');
 
@@ -220,41 +225,65 @@ export function useTextInput({
     pushToHistory(buffer, cursor);
 
     const line = buffer.lines[cursor.line];
-    const marker = findPlaceholderBefore(line, cursor.column);
-    if (marker) {
-      const newLine = line.slice(0, marker.start) + line.slice(marker.end);
+
+    // Check if deleting a paste placeholder marker
+    const placeholder = findPlaceholderBefore(line, cursor.column);
+    if (placeholder) {
+      const newLine = line.slice(0, placeholder.start) + line.slice(placeholder.end);
       const newLines = [...buffer.lines];
       newLines[cursor.line] = newLine;
       setBuffer({ lines: newLines });
-      setCursor({ line: cursor.line, column: marker.start });
-      setPlaceholderState(prev => removePlaceholder(prev, marker.id));
+      setCursor({ line: cursor.line, column: placeholder.start });
+      setPlaceholderState(prev => removePlaceholder(prev, placeholder.id));
       return;
+    }
+
+    // Check if deleting a sentinel (image)
+    if (cursor.column > 0 && line[cursor.column - 1] === '') {
+      const sentinel = findSentinelAt(line, cursor.column - 1);
+      if (sentinel && images[sentinel.id]) {
+        const newImages = { ...images };
+        delete newImages[sentinel.id];
+        setImages(newImages);
+      }
     }
 
     const result = bufferDeleteChar(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory, images, placeholderState]);
 
   const deleteCharForward = useCallback(() => {
     flushPendingInsertBatch();
     pushToHistory(buffer, cursor);
 
     const line = buffer.lines[cursor.line];
-    const marker = findPlaceholderAfter(line, cursor.column);
-    if (marker) {
-      const newLine = line.slice(0, marker.start) + line.slice(marker.end);
+
+    // Check if deleting a paste placeholder marker
+    const placeholder = findPlaceholderAfter(line, cursor.column);
+    if (placeholder) {
+      const newLine = line.slice(0, placeholder.start) + line.slice(placeholder.end);
       const newLines = [...buffer.lines];
       newLines[cursor.line] = newLine;
       setBuffer({ lines: newLines });
-      setPlaceholderState(prev => removePlaceholder(prev, marker.id));
+      setPlaceholderState(prev => removePlaceholder(prev, placeholder.id));
       return;
+    }
+
+    // Check if deleting a sentinel (image)
+    if (cursor.column < line.length && line[cursor.column] === '') {
+      const sentinel = findSentinelAt(line, cursor.column);
+      if (sentinel && images[sentinel.id]) {
+        const newImages = { ...images };
+        delete newImages[sentinel.id];
+        setImages(newImages);
+      }
     }
 
     const result = bufferDeleteCharForward(buffer, cursor);
     setBuffer(result.buffer);
     setCursor(result.cursor);
-  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory]);
+  }, [buffer, cursor, flushPendingInsertBatch, pushToHistory, images, placeholderState]);
 
   const newLine = useCallback(() => {
     flushPendingInsertBatch();
@@ -372,16 +401,11 @@ export function useTextInput({
       clearPendingInsertTimer();
       pendingInsertBatchRef.current.startState = undefined;
 
-      setRedoStack((prev) => [...prev, {
-        buffer,
-        cursor,
-        placeholderState: placeholderState,
-      }]);
+      setRedoStack((prev) => [...prev, { buffer, cursor, placeholderState, images }]);
       setBuffer(pendingStartState.buffer);
       setCursor(pendingStartState.cursor);
-      if (pendingStartState.placeholderState) {
-        setPlaceholderState(pendingStartState.placeholderState);
-      }
+      setPlaceholderState(pendingStartState.placeholderState);
+      setImages(pendingStartState.images);
       return;
     }
 
@@ -390,16 +414,13 @@ export function useTextInput({
     const previousState = undoStack[undoStack.length - 1];
     const newUndoStack = undoStack.slice(0, -1);
 
-    setRedoStack((prev) => [...prev, {
-      buffer,
-      cursor,
-      placeholderState: placeholderState,
-    }]);
+    setRedoStack((prev) => [...prev, { buffer, cursor, placeholderState, images }]);
     setBuffer(previousState.buffer);
     setCursor(previousState.cursor);
     setPlaceholderState(previousState.placeholderState);
+    setImages(previousState.images);
     setUndoStack(newUndoStack);
-  }, [buffer, clearPendingInsertTimer, cursor, undoStack, placeholderState]);
+  }, [buffer, clearPendingInsertTimer, cursor, undoStack, placeholderState, images]);
 
   const redo = useCallback(() => {
     if (pendingInsertBatchRef.current.startState) {
@@ -411,16 +432,13 @@ export function useTextInput({
     const nextState = redoStack[redoStack.length - 1];
     const newRedoStack = redoStack.slice(0, -1);
 
-    setUndoStack((prev) => [...prev, {
-      buffer,
-      cursor,
-      placeholderState: placeholderState,
-    }]);
+    setUndoStack((prev) => [...prev, { buffer, cursor, placeholderState, images }]);
     setBuffer(nextState.buffer);
     setCursor(nextState.cursor);
     setPlaceholderState(nextState.placeholderState);
+    setImages(nextState.images);
     setRedoStack(newRedoStack);
-  }, [buffer, cursor, redoStack, placeholderState]);
+  }, [buffer, cursor, redoStack, placeholderState, images]);
 
   const setText = useCallback(
     (text: string) => {
@@ -435,6 +453,38 @@ export function useTextInput({
         line: lines.length - 1,
         column: lines[lines.length - 1].length,
       });
+
+      // Clean up orphaned images
+      const fullText = getTextContent(newBuffer);
+      const sentinels = parseSentinels(fullText);
+      const usedIds = new Set(sentinels.map(s => s.id));
+      setImages((prev) => {
+        const next: Record<string, ImageRef> = {};
+        for (const [id, ref] of Object.entries(prev)) {
+          if (usedIds.has(id)) {
+            next[id] = ref;
+          }
+        }
+        return next;
+      });
+    },
+    [buffer, cursor, flushPendingInsertBatch, pushToHistory]
+  );
+
+  const insertImage = useCallback(
+    (imageRef: ImageRef) => {
+      flushPendingInsertBatch();
+      pushToHistory(buffer, cursor);
+
+      const sentinel = createSentinel(imageRef.id, imageRef.displayNumber);
+      const result = bufferInsertText(buffer, cursor, sentinel);
+      setBuffer(result.buffer);
+      setCursor(result.cursor);
+      setImages((prev) => ({ ...prev, [imageRef.id]: imageRef }));
+
+      if (imageRef.displayNumber >= nextDisplayNumberRef.current) {
+        nextDisplayNumberRef.current = imageRef.displayNumber + 1;
+      }
     },
     [buffer, cursor, flushPendingInsertBatch, pushToHistory]
   );
@@ -448,6 +498,20 @@ export function useTextInput({
     () => getValueCursorOffset(buffer.lines, cursor, placeholderState.placeholders),
     [buffer.lines, cursor, placeholderState.placeholders]
   );
+
+  const imagesList = useMemo(() => Object.values(images), [images]);
+
+  const getImagesCallback = useCallback((): ImageRef[] => {
+    return imagesList;
+  }, [imagesList]);
+
+  const setImagesCallback = useCallback((newImages: ImageRef[]) => {
+    const map: Record<string, ImageRef> = {};
+    for (const img of newImages) {
+      map[img.id] = img;
+    }
+    setImages(map);
+  }, []);
 
   return {
     value,
@@ -471,5 +535,9 @@ export function useTextInput({
       [buffer.lines, flushPendingInsertBatch, placeholderState.placeholders]
     ),
     placeholderState,
+    insertImage,
+    images: imagesList,
+    getImages: getImagesCallback,
+    setImages: setImagesCallback,
   };
 }

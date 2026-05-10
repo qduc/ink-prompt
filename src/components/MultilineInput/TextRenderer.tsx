@@ -1,45 +1,43 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { Buffer, Cursor, WrapResult, PlaceholderState } from './types.js';
+import type { ImageRef } from './ImageTypes.js';
 import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
+import { getVisualRows } from './TextBuffer.js';
 import { getDisplayLine, bufferColToDisplayCol } from './Placeholder.js';
+import { parseSentinels, getPlaceholderText, type SentinelInfo } from './ImageSentinel.js';
 
-/**
- * Props for the TextRenderer component
- */
+const PLACEHOLDER_PATTERN = /\[Pasted Image #\d+\]/g;
+
 export interface TextRendererProps {
-  /** Text buffer to render */
   buffer: Buffer;
-  /** Current cursor position */
   cursor: Cursor;
-  /** Terminal width for word wrapping (defaults to 80) */
   width?: number;
-  /** Whether to show the cursor (defaults to true) */
   showCursor?: boolean;
   /** Placeholder state for expanding paste markers into display text */
   placeholderState?: PlaceholderState;
+  images?: Record<string, ImageRef>;
 }
 
-/**
- * Wrap buffer lines to fit within a given width.
- * Returns visual lines and maps cursor position to visual coordinates.
- */
-export function wrapLines(buffer: Buffer, cursor: Cursor, width: number): WrapResult {
+export function wrapLines(
+  buffer: Buffer,
+  cursor: Cursor,
+  width: number,
+  images?: Record<string, ImageRef>
+): WrapResult {
   const visualLines: string[] = [];
   let cursorVisualRow = 0;
   let cursorVisualCol = 0;
-
-  // Ensure width is at least 1 to avoid infinite loops
   const safeWidth = Math.max(1, width);
-
   let visualRowIndex = 0;
 
   for (let lineIndex = 0; lineIndex < buffer.lines.length; lineIndex++) {
-    const line = buffer.lines[lineIndex];
+    const rawLine = buffer.lines[lineIndex];
     const isCursorLine = lineIndex === cursor.line;
+    const sentinels = parseSentinels(rawLine);
+    const rows = getVisualRows(rawLine, safeWidth);
 
-    // Handle empty line case
-    if (line.length === 0) {
+    if (rawLine.length === 0) {
       visualLines.push('');
       if (isCursorLine) {
         cursorVisualRow = visualRowIndex;
@@ -49,61 +47,22 @@ export function wrapLines(buffer: Buffer, cursor: Cursor, width: number): WrapRe
       continue;
     }
 
-    let remaining = line;
-    let offset = 0;
-
-    while (remaining.length > 0) {
-      let chunkLength = safeWidth;
-
-      if (remaining.length <= safeWidth) {
-        chunkLength = remaining.length;
-      } else {
-        // Find split point (last space within width)
-        let splitIndex = -1;
-        for (let i = safeWidth - 1; i >= 0; i--) {
-          if (remaining[i] === ' ') {
-            splitIndex = i;
-            break;
-          }
-        }
-
-        if (splitIndex !== -1) {
-          // Include the space in the chunk
-          chunkLength = splitIndex + 1;
-        }
-      }
-
-      const chunk = remaining.slice(0, chunkLength);
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const row = rows[rowIndex];
+      const rowEnd = row.start + row.length;
+      const chunk = expandRawSegment(rawLine, row.start, rowEnd, sentinels);
       visualLines.push(chunk);
 
       if (isCursorLine) {
-      // Check if cursor falls within this chunk
-        // Cursor is at `cursor.column` (relative to line start)
-        // Current chunk covers `offset` to `offset + chunkLength`
-        if (cursor.column >= offset && cursor.column < offset + chunkLength) {
+        if (cursor.column >= row.start && cursor.column < rowEnd) {
           cursorVisualRow = visualRowIndex;
-          cursorVisualCol = cursor.column - offset;
-        } else if (cursor.column === offset + chunkLength) {
-          // Cursor is at the end of this chunk
-          if (offset + chunkLength === line.length) {
-          // End of line
-            cursorVisualRow = visualRowIndex;
-            cursorVisualCol = chunkLength;
-          } else {
-            // Wrap point - cursor should be at start of next line
-            // We'll let the next iteration handle it (it will be index 0 of next chunk)
-            // But wait, if we are at the wrap point, the next iteration will see:
-            // offset = oldOffset + chunkLength.
-            // cursor.column == offset.
-            // So it enters the first `if` block: cursor.column >= offset.
-            // cursorVisualCol = cursor.column - offset = 0.
-            // This is correct.
-          }
+          cursorVisualCol = visualColumnForRawColumn(rawLine, row.start, cursor.column, sentinels);
+        } else if (cursor.column === rowEnd && rowIndex === rows.length - 1) {
+          cursorVisualRow = visualRowIndex;
+          cursorVisualCol = chunk.length;
         }
       }
 
-      remaining = remaining.slice(chunkLength);
-      offset += chunkLength;
       visualRowIndex++;
     }
   }
@@ -111,20 +70,94 @@ export function wrapLines(buffer: Buffer, cursor: Cursor, width: number): WrapRe
   return { visualLines, cursorVisualRow, cursorVisualCol };
 }
 
-/**
- * Render a line with cursor inserted at the specified position
- */
-function renderLineWithCursor(
+function expandRawSegment(
   line: string,
-  cursorCol: number,
-  showCursor: boolean
-): React.ReactNode {
-  if (!showCursor) {
-    // Empty lines need a space to be rendered by Ink
-    return <Text>{line || ' '}</Text>;
+  start: number,
+  end: number,
+  sentinels: SentinelInfo[]
+): string {
+  let expanded = '';
+  let rawIndex = start;
+
+  while (rawIndex < end) {
+    const sentinel = sentinels.find(s => s.start === rawIndex);
+    if (sentinel && sentinel.end <= end) {
+      expanded += getPlaceholderText(sentinel.displayNumber);
+      rawIndex = sentinel.end;
+    } else {
+      expanded += line[rawIndex];
+      rawIndex++;
+    }
   }
 
-  // For empty lines with cursor, we need special handling
+  return expanded;
+}
+
+function visualColumnForRawColumn(
+  line: string,
+  start: number,
+  column: number,
+  sentinels: SentinelInfo[]
+): number {
+  let visualCol = 0;
+  let rawIndex = start;
+
+  while (rawIndex < column) {
+    const sentinel = sentinels.find(s => s.start === rawIndex);
+    if (sentinel) {
+      if (column <= sentinel.start) {
+        return visualCol;
+      }
+      visualCol += getPlaceholderText(sentinel.displayNumber).length;
+      rawIndex = sentinel.end;
+    } else {
+      visualCol += 1;
+      rawIndex++;
+    }
+  }
+
+  return visualCol;
+}
+
+function renderLineSegments(line: string): React.ReactNode[] {
+  const segments: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  const re = new RegExp(PLACEHOLDER_PATTERN.source, 'g');
+
+  while ((match = re.exec(line)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push(
+        <Text key={`t-${lastIndex}`}>{line.slice(lastIndex, match.index)}</Text>
+      );
+    }
+    segments.push(
+      <Text dimColor key={`p-${match.index}`}>{match[0]}</Text>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < line.length) {
+    segments.push(
+      <Text key={`t-${lastIndex}`}>{line.slice(lastIndex)}</Text>
+    );
+  }
+
+  return segments;
+}
+
+function renderVisualLine(line: string, isCursorRow: boolean, cursorCol: number, showCursor: boolean): React.ReactNode {
+  if (!isCursorRow) {
+    if (line.length === 0) return <Text> </Text>;
+    return <>{renderLineSegments(line)}</>;
+  }
+
+  if (!showCursor) {
+    if (line.length === 0) return <Text> </Text>;
+    return <>{renderLineSegments(line)}</>;
+  }
+
   if (line.length === 0) {
     return <Text inverse> </Text>;
   }
@@ -133,31 +166,26 @@ function renderLineWithCursor(
   const charUnderCursor = cursorCol < line.length ? line[cursorCol] : ' ';
   const after = line.slice(cursorCol + 1);
 
-  // Render the cursor using Ink's Text with inverse colors for high visibility.
-  // We show the actual character under the cursor (or a space at line end)
-  // with inverted colors to make it stand out in any terminal color scheme.
   return (
     <>
-      <Text>{before}</Text>
+      {renderLineSegments(before)}
       <Text inverse>{charUnderCursor}</Text>
-      <Text>{after}</Text>
+      {renderLineSegments(after)}
     </>
   );
 }
 
-/**
- * TextRenderer component for displaying buffer content with cursor
- */
 export function TextRenderer({
   buffer,
   cursor,
   width: propWidth,
   showCursor = true,
   placeholderState,
+  images = {},
 }: TextRendererProps): React.ReactElement {
   const width = useTerminalWidth(propWidth);
 
-  // Convert buffer to display text for rendering (expand placeholder markers)
+  // Expand paste placeholder markers to display text before rendering
   const hasPlaceholders = placeholderState && placeholderState.placeholders.size > 0;
 
   const displayBuffer: Buffer = hasPlaceholders
@@ -168,7 +196,7 @@ export function TextRenderer({
     ? { line: cursor.line, column: bufferColToDisplayCol(buffer.lines[cursor.line], cursor.column, placeholderState!.placeholders) }
     : cursor;
 
-  const { visualLines, cursorVisualRow, cursorVisualCol } = wrapLines(displayBuffer, displayCursor, width);
+  const { visualLines, cursorVisualRow, cursorVisualCol } = wrapLines(displayBuffer, displayCursor, width, images);
 
   return (
     <Box flexDirection="column">
@@ -177,12 +205,7 @@ export function TextRenderer({
 
         return (
           <Box key={index}>
-            {isCursorRow ? (
-              // renderLineWithCursor returns a ReactNode composed of Text
-              renderLineWithCursor(line, cursorVisualCol, showCursor)
-            ) : (
-              <Text>{line || ' '}</Text>
-            )}
+            {renderVisualLine(line, isCursorRow, cursorVisualCol, showCursor)}
           </Box>
         );
       })}
