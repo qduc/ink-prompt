@@ -148,6 +148,17 @@ function isBackspaceSequence(seq?: string): boolean {
 }
 
 /**
+ * Raw sequences that represent Shift+Enter across terminal emulators.
+ * - `\x1b\r` / `\x1b\n`: ESC + CR/LF emitted by terminals like iTerm2 / WezTerm when configured.
+ * - `\x1b[13;2u`: kitty keyboard protocol encoding for Shift+Enter.
+ */
+const SHIFT_ENTER_SEQUENCES = ['\x1b\r', '\x1b\n', '\x1b[13;2u'];
+
+function isShiftEnterSequence(seq?: string): boolean {
+  return !!seq && SHIFT_ENTER_SEQUENCES.includes(seq);
+}
+
+/**
  * Handles keyboard input and maps it to text input actions.
  *
  * @param key - The Ink key object
@@ -255,6 +266,18 @@ export function handleKey(
   if (key.delete) {
     // Delete key - forward delete (delete character after cursor)
     actions.deleteForward();
+    return;
+  }
+
+  // Shift+Enter inserts a newline regardless of buffer state.
+  // Detected via Ink's shift+return flags or raw escape sequences emitted by
+  // terminals that distinguish Shift+Enter from Enter.
+  if (
+    (key.shift && key.return) ||
+    (key.meta && key.return) ||
+    isShiftEnterSequence(rawInput)
+  ) {
+    actions.newLine();
     return;
   }
 

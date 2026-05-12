@@ -365,6 +365,27 @@ describe('KeyHandler', () => {
       expect(actions.submit).not.toHaveBeenCalled();
     });
 
+    it('handles Shift+Enter as newline', () => {
+      buffer = { lines: ['hello'] };
+      handleKey({ shift: true, return: true }, '', buffer, actions);
+      expect(actions.newLine).toHaveBeenCalledTimes(1);
+      expect(actions.submit).not.toHaveBeenCalled();
+    });
+
+    it('handles ESC+CR raw sequence (Shift+Enter) as newline', () => {
+      buffer = { lines: ['hello'] };
+      handleKey({ meta: true, return: true }, '', buffer, actions, undefined, '\x1b\r');
+      expect(actions.newLine).toHaveBeenCalledTimes(1);
+      expect(actions.submit).not.toHaveBeenCalled();
+    });
+
+    it('handles kitty Shift+Enter CSI u sequence as newline', () => {
+      buffer = { lines: ['hello'] };
+      handleKey({}, '', buffer, actions, undefined, '\x1b[13;2u');
+      expect(actions.newLine).toHaveBeenCalledTimes(1);
+      expect(actions.submit).not.toHaveBeenCalled();
+    });
+
     it('handles Enter as newline if line ends with backslash (multiple lines)', () => {
         const cursor = { line: 1, column: 7 };
         buffer = { lines: ['first', 'second\\'] };

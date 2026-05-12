@@ -60,7 +60,7 @@ render(<App />);
 `MultilineInput` supports typical editing controls:
 
 - **Arrow keys** for navigation
-- `Ctrl+J` or typing `\` before **Enter** to add a newline
+- **Shift+Enter**, `Ctrl+J`, or typing `\` before **Enter** to add a newline (Shift+Enter requires a terminal that distinguishes it — most emit `ESC + CR` or the kitty `CSI 13;2u` sequence)
 - `Ctrl+Z` / `Ctrl+Y` for undo/redo
 - `Ctrl+A` / `Ctrl+E` for jump to line start/end
 - **Home** / **End** keys for line start/end
