@@ -473,6 +473,14 @@ export function moveCursor(
     case 'lineEnd':
       return { line, column: currentLine.length };
 
+    case 'bufferStart':
+      return { line: 0, column: 0 };
+
+    case 'bufferEnd': {
+      const lastLineIdx = lineCount - 1;
+      return { line: lastLineIdx, column: buffer.lines[lastLineIdx].length };
+    }
+
     default:
       return cursor;
   }

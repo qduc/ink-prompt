@@ -498,6 +498,52 @@ describe('TextBuffer', () => {
         expect(result).toEqual({ line: 0, column: 5 });
       });
     });
+
+    describe('bufferStart', () => {
+      it('moves to start of buffer on first line', () => {
+        const buffer = createBuffer('hello');
+        const cursor: Cursor = { line: 0, column: 3 };
+        const result = moveCursor(buffer, cursor, 'bufferStart');
+        expect(result).toEqual({ line: 0, column: 0 });
+      });
+
+      it('moves to start of buffer from later line', () => {
+        const buffer = createBuffer('line1\nline2\nline3');
+        const cursor: Cursor = { line: 2, column: 3 };
+        const result = moveCursor(buffer, cursor, 'bufferStart');
+        expect(result).toEqual({ line: 0, column: 0 });
+      });
+
+      it('stays at start if already there', () => {
+        const buffer = createBuffer('hello');
+        const cursor: Cursor = { line: 0, column: 0 };
+        const result = moveCursor(buffer, cursor, 'bufferStart');
+        expect(result).toEqual({ line: 0, column: 0 });
+      });
+    });
+
+    describe('bufferEnd', () => {
+      it('moves to end of buffer on last line', () => {
+        const buffer = createBuffer('hello');
+        const cursor: Cursor = { line: 0, column: 2 };
+        const result = moveCursor(buffer, cursor, 'bufferEnd');
+        expect(result).toEqual({ line: 0, column: 5 });
+      });
+
+      it('moves to end of buffer from earlier line', () => {
+        const buffer = createBuffer('line1\nline2\nline3');
+        const cursor: Cursor = { line: 0, column: 3 };
+        const result = moveCursor(buffer, cursor, 'bufferEnd');
+        expect(result).toEqual({ line: 2, column: 5 });
+      });
+
+      it('stays at end if already there', () => {
+        const buffer = createBuffer('hello');
+        const cursor: Cursor = { line: 0, column: 5 };
+        const result = moveCursor(buffer, cursor, 'bufferEnd');
+        expect(result).toEqual({ line: 0, column: 5 });
+      });
+    });
   });
 
   describe('getTextContent', () => {

@@ -362,8 +362,22 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
       suppressNextInput.current = false;
       return;
     }
-    log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-￿]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
-    handleKey(key, input, textInput.buffer, actions, textInput.cursor, lastRawInput.current, terminalWidth);
+    log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
+
+    // Detect if this is an Alt keypress for symbol keys (like Alt+\ or Alt+/)
+    // Standard Alt keypresses send ESC (\x1b) followed by the character.
+    // We check if it is a 2-character sequence starting with ESC, excluding CSI/SS3 prefixes ('[' or 'O')
+    const raw = lastRawInput.current;
+    const isMeta = key.meta || (
+      raw &&
+      raw.length === 2 &&
+      raw.startsWith('\x1b') &&
+      raw[1] !== '[' &&
+      raw[1] !== 'O'
+    );
+    const updatedKey = isMeta ? { ...key, meta: true } : key;
+
+    handleKey(updatedKey, input, textInput.buffer, actions, textInput.cursor, lastRawInput.current, terminalWidth);
   }, { isActive });
 
   const isEmpty = textInput.value === '';

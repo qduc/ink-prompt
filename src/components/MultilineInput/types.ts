@@ -19,7 +19,7 @@ export interface Buffer {
 /**
  * Cursor movement directions
  */
-export type Direction = 'up' | 'down' | 'left' | 'right' | 'lineStart' | 'lineEnd';
+export type Direction = 'up' | 'down' | 'left' | 'right' | 'lineStart' | 'lineEnd' | 'bufferStart' | 'bufferEnd';
 
 /**
  * Boundary arrow directions (subset of Direction used for boundary detection)

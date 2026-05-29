@@ -74,6 +74,18 @@ describe('KeyHandler', () => {
       handleKey({ ctrl: true }, 'e', buffer, actions);
       expect(actions.moveCursor).toHaveBeenCalledWith('lineEnd');
     });
+
+        it('handles Alt+\ as buffer start', () => {
+      handleKey({ meta: true }, '\\', buffer, actions);
+      expect(actions.moveCursor).toHaveBeenCalledWith('bufferStart');
+    });
+
+    it('handles Alt+/ as buffer end', () => {
+      handleKey({ meta: true }, '/', buffer, actions);
+      expect(actions.moveCursor).toHaveBeenCalledWith('bufferEnd');
+    });
+
+
   });
 
   describe('Boundary Arrow', () => {

@@ -235,6 +235,16 @@ export function handleKey(
     return;
   }
 
+  // Alt+\ for buffer start, Alt+/ for buffer end (nano style)
+  if (key.meta && input === '\\') {
+    actions.moveCursor('bufferStart');
+    return;
+  }
+  if (key.meta && input === '/') {
+    actions.moveCursor('bufferEnd');
+    return;
+  }
+
   // Paste / History
   if (key.ctrl) {
     if (input === 'v' && actions.paste) {
