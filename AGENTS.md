@@ -47,6 +47,12 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
     - Debounce prevents excessive re-renders during rapid terminal resizing (e.g., when user drags window)
     - Debounce delay is configurable via optional second parameter: `useTerminalWidth(width?, debounceMs?)`
     - Properly cleans up event listeners and pending debounce timers on unmount
+  - `useTerminalHeight.ts` - Hook that provides terminal height with resize event handling
+    - Returns `propHeight` if provided, otherwise returns terminal height from stdout
+    - Automatically updates on terminal resize events with debouncing (default: 100ms)
+    - Debounce prevents excessive re-renders during rapid terminal resizing
+    - Debounce delay is configurable via optional second parameter: `useTerminalHeight(height?, debounceMs?)`
+    - Properly cleans up event listeners and pending debounce timers on unmount
 
 **Utilities:**
 - `src/utils/logger.ts` - File-based debug logger

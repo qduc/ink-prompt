@@ -259,4 +259,69 @@ describe('TextRenderer', () => {
       expect(container.textContent).toContain('fghij');
     });
   });
+
+  describe('maxHeight and scrolling', () => {
+    it('only renders up to maxHeight lines when text is longer', () => {
+      const buffer: Buffer = { lines: ['line1', 'line2', 'line3', 'line4', 'line5'] };
+      const cursor: Cursor = { line: 0, column: 0 };
+
+      const { container } = render(
+        <TextRenderer buffer={buffer} cursor={cursor} maxHeight={3} />
+      );
+
+      expect(container.textContent).toContain('line1');
+      expect(container.textContent).toContain('line2');
+      expect(container.textContent).toContain('line3');
+      expect(container.textContent).not.toContain('line4');
+      expect(container.textContent).not.toContain('line5');
+    });
+
+    it('scrolls down to show the cursor when it moves past the viewport height', () => {
+      const buffer: Buffer = { lines: ['line1', 'line2', 'line3', 'line4', 'line5'] };
+      const cursor: Cursor = { line: 4, column: 0 };
+
+      const { container } = render(
+        <TextRenderer buffer={buffer} cursor={cursor} maxHeight={3} />
+      );
+
+      expect(container.textContent).not.toContain('line1');
+      expect(container.textContent).not.toContain('line2');
+      expect(container.textContent).toContain('line3');
+      expect(container.textContent).toContain('line4');
+      expect(container.textContent).toContain('line5');
+    });
+
+    it('scrolls up to show the cursor when it moves above the viewport top', () => {
+      const buffer: Buffer = { lines: ['line1', 'line2', 'line3', 'line4', 'line5'] };
+
+      // Step 1: Render with cursor at bottom to establish scroll (scrollTop = 2)
+      const { container, rerender } = render(
+        <TextRenderer buffer={buffer} cursor={{ line: 4, column: 0 }} maxHeight={3} />
+      );
+      expect(container.textContent).not.toContain('line1');
+      expect(container.textContent).toContain('line5');
+
+      // Step 2: Move cursor back to line 1 (scrollTop should become 1)
+      rerender(
+        <TextRenderer buffer={buffer} cursor={{ line: 1, column: 0 }} maxHeight={3} />
+      );
+
+      expect(container.textContent).not.toContain('line1');
+      expect(container.textContent).toContain('line2');
+      expect(container.textContent).toContain('line3');
+      expect(container.textContent).toContain('line4');
+      expect(container.textContent).not.toContain('line5');
+
+      // Step 3: Move cursor back to line 0 (scrollTop should become 0)
+      rerender(
+        <TextRenderer buffer={buffer} cursor={{ line: 0, column: 0 }} maxHeight={3} />
+      );
+
+      expect(container.textContent).toContain('line1');
+      expect(container.textContent).toContain('line2');
+      expect(container.textContent).toContain('line3');
+      expect(container.textContent).not.toContain('line4');
+      expect(container.textContent).not.toContain('line5');
+    });
+  });
 });

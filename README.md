@@ -54,6 +54,7 @@ render(<App />);
 | `maxImageSizeBytes` | `number` | `10485760` | Maximum image size in bytes (default 10 MiB) |
 | `maxImageCount` | `number` | `10` | Maximum number of pasted images |
 | `acceptedMimeTypes` | `string[]` | | Restricts accepted image MIME types |
+| `maxHeight` | `number` | `Math.floor(terminalHeight * 0.8)` | Maximum visual rows to render before scrolling (defaults to terminal height minus a 20% buffer) |
 
 ### Keyboard Controls
 

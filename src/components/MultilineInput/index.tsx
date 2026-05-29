@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback, useRef } from 'react';
 import { useInput, useStdin, Box, Text } from 'ink';
 import { useTerminalWidth } from '../../hooks/useTerminalWidth.js';
+import { useTerminalHeight } from '../../hooks/useTerminalHeight.js';
 import { useTextInput } from './useTextInput.js';
 import { handleKey, KeyHandlerActions } from './KeyHandler.js';
 import { TextRenderer } from './TextRenderer.js';
@@ -40,6 +41,7 @@ export interface MultilineInputProps {
   maxImageSizeBytes?: number;
   maxImageCount?: number;
   acceptedMimeTypes?: string[];
+  maxHeight?: number;
 }
 
 export interface MultilineInputCoreProps {
@@ -67,6 +69,7 @@ export interface MultilineInputCoreProps {
   formatPastePlaceholder?: (displayNumber: number) => string;
   images?: ImageRef[];
   onImagesChange?: (images: ImageRef[]) => void;
+  maxHeight?: number;
 }
 
 export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
@@ -82,6 +85,7 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   formatPastePlaceholder,
   images,
   onImagesChange,
+  maxHeight,
 }) => {
   const textInput = useTextInput({ initialValue: value ?? '', undoDebounceMs, pasteThreshold, formatPastePlaceholder });
 
@@ -145,6 +149,10 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
     return <div style={{ opacity: 0.5 }}>{placeholder}</div>;
   }
 
+  const terminalHeight = useTerminalHeight();
+  const defaultMaxHeight = Math.max(1, Math.floor(terminalHeight * 0.8));
+  const effectiveMaxHeight = maxHeight ?? defaultMaxHeight;
+
   return (
     <TextRenderer
       buffer={textInput.buffer}
@@ -152,6 +160,7 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
       width={width}
       showCursor={showCursor}
       blockState={textInput.blockState}
+      maxHeight={effectiveMaxHeight}
     />
   );
 };
@@ -177,6 +186,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   maxImageSizeBytes,
   maxImageCount,
   acceptedMimeTypes,
+  maxHeight,
 }) => {
 
   const terminalWidth = useTerminalWidth(width);
@@ -367,6 +377,10 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     );
   }
 
+  const terminalHeight = useTerminalHeight();
+  const defaultMaxHeight = Math.max(1, Math.floor(terminalHeight * 0.8));
+  const effectiveMaxHeight = maxHeight ?? defaultMaxHeight;
+
   return (
     <Box flexDirection="column">
       <TextRenderer
@@ -375,6 +389,7 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
         width={terminalWidth}
         showCursor={showCursor}
         blockState={textInput.blockState}
+        maxHeight={effectiveMaxHeight}
       />
       {isPasting && (
         <Box>

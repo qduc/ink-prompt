@@ -13,6 +13,7 @@ export interface TextRendererProps {
   showCursor?: boolean;
   /** Block state for expanding markers into display text */
   blockState?: BlockState;
+  maxHeight?: number;
 }
 
 interface VisualSegment {
@@ -212,18 +213,54 @@ export function TextRenderer({
   width: propWidth,
   showCursor = true,
   blockState,
+  maxHeight,
 }: TextRendererProps): React.ReactElement {
   const width = useTerminalWidth(propWidth);
   const entries = blockState?.entries;
 
   const { rows, cursorVisualRow, cursorVisualCol } = wrapLines(buffer, cursor, width, entries);
 
+  // Scroll state
+  const [scrollTop, setScrollTop] = React.useState(0);
+
+  let currentScrollTop = scrollTop;
+  if (maxHeight !== undefined) {
+    if (cursorVisualRow < currentScrollTop) {
+      currentScrollTop = cursorVisualRow;
+    } else if (cursorVisualRow >= currentScrollTop + maxHeight) {
+      currentScrollTop = cursorVisualRow - maxHeight + 1;
+    }
+
+    const maxScroll = Math.max(0, rows.length - maxHeight);
+    if (currentScrollTop > maxScroll) {
+      currentScrollTop = maxScroll;
+    }
+    if (currentScrollTop < 0) {
+      currentScrollTop = 0;
+    }
+
+    if (currentScrollTop !== scrollTop) {
+      // In React, setting state during render is a standard pattern for deriving state.
+      setScrollTop(currentScrollTop);
+    }
+  } else {
+    if (scrollTop !== 0) {
+      setScrollTop(0);
+    }
+    currentScrollTop = 0;
+  }
+
+  const visibleRows = maxHeight !== undefined
+    ? rows.slice(currentScrollTop, currentScrollTop + maxHeight)
+    : rows;
+
   return (
     <Box flexDirection="column">
-      {rows.map((row, index) => {
-        const isCursorRow = index === cursorVisualRow;
+      {visibleRows.map((row, index) => {
+        const originalIndex = currentScrollTop + index;
+        const isCursorRow = originalIndex === cursorVisualRow;
         return (
-          <Box key={index}>
+          <Box key={originalIndex}>
             {renderVisualRow(row, isCursorRow, cursorVisualCol, showCursor)}
           </Box>
         );
