@@ -42,6 +42,7 @@ export interface MultilineInputProps {
   maxImageCount?: number;
   acceptedMimeTypes?: string[];
   maxHeight?: number;
+  ignoreInput?: (input: string, key: any) => boolean;
 }
 
 export interface MultilineInputCoreProps {
@@ -87,7 +88,12 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
   onImagesChange,
   maxHeight,
 }) => {
-  const textInput = useTextInput({ initialValue: value ?? '', undoDebounceMs, pasteThreshold, formatPastePlaceholder });
+  const textInput = useTextInput({
+    initialValue: value ?? '',
+    undoDebounceMs,
+    pasteThreshold,
+    formatPastePlaceholder,
+  });
 
   const isSyncingFromProps = useRef(false);
 
@@ -187,8 +193,8 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   maxImageCount,
   acceptedMimeTypes,
   maxHeight,
+  ignoreInput,
 }) => {
-
   const terminalWidth = useTerminalWidth(width);
 
   const { stdin } = useStdin();
@@ -197,7 +203,13 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
   const pasteBuffer = useRef<string>('');
   const suppressNextInput = useRef<boolean>(false);
 
-  const textInput = useTextInput({ initialValue: value ?? '', width: terminalWidth, undoDebounceMs, pasteThreshold, formatPastePlaceholder });
+  const textInput = useTextInput({
+    initialValue: value ?? '',
+    width: terminalWidth,
+    undoDebounceMs,
+    pasteThreshold,
+    formatPastePlaceholder,
+  });
   const textInputRef = useRef(textInput);
   useEffect(() => {
     textInputRef.current = textInput;
@@ -226,7 +238,9 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
       if (!pasteActive.current && hasStart) {
         pasteActive.current = true;
         pasteBuffer.current = '';
-        remaining = remaining.slice(remaining.indexOf(PASTE_START) + PASTE_START.length);
+        remaining = remaining.slice(
+          remaining.indexOf(PASTE_START) + PASTE_START.length,
+        );
       }
 
       // Suppress the useInput dispatch for any chunk that participates in a paste.
@@ -355,30 +369,47 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     paste: handlePaste,
   };
 
-  useInput((input: string, key: any) => {
-    if (suppressNextInput.current) {
-      // This stdin chunk is part of a bracketed paste — already handled by the
-      // raw 'data' listener. Don't dispatch as keystrokes.
-      suppressNextInput.current = false;
-      return;
-    }
-    log(`[USEINPUT] input="${input.replace(/[\x00-\x1F\x7F-]/g, c => `\\x${c.charCodeAt(0).toString(16)}`)}" key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`);
+  useInput(
+    (input: string, key: any) => {
+      if (ignoreInput?.(input, key)) {
+        return;
+      }
 
-    // Detect if this is an Alt keypress for symbol keys (like Alt+\ or Alt+/)
-    // Standard Alt keypresses send ESC (\x1b) followed by the character.
-    // We check if it is a 2-character sequence starting with ESC, excluding CSI/SS3 prefixes ('[' or 'O')
-    const raw = lastRawInput.current;
-    const isMeta = key.meta || (
-      raw &&
-      raw.length === 2 &&
-      raw.startsWith('\x1b') &&
-      raw[1] !== '[' &&
-      raw[1] !== 'O'
-    );
-    const updatedKey = isMeta ? { ...key, meta: true } : key;
+      if (suppressNextInput.current) {
+        // This stdin chunk is part of a bracketed paste — already handled by the
+        // raw 'data' listener. Don't dispatch as keystrokes.
+        suppressNextInput.current = false;
+        return;
+      }
+      log(
+        `[USEINPUT] input='${input.replace(/[\x00-\x1F\x7F-]/g, (c) => `\\x${c.charCodeAt(0).toString(16)}`)}' key=${JSON.stringify(key)} rawLen=${lastRawInput.current?.length || 0}`,
+      );
 
-    handleKey(updatedKey, input, textInput.buffer, actions, textInput.cursor, lastRawInput.current, terminalWidth);
-  }, { isActive });
+      // Detect if this is an Alt keypress for symbol keys (like Alt+\ or Alt+/)
+      // Standard Alt keypresses send ESC (\x1b) followed by the character.
+      // We check if it is a 2-character sequence starting with ESC, excluding CSI/SS3 prefixes ('[' or 'O')
+      const raw = lastRawInput.current;
+      const isMeta =
+        key.meta ||
+        (raw &&
+          raw.length === 2 &&
+          raw.startsWith('\x1b') &&
+          raw[1] !== '[' &&
+          raw[1] !== 'O');
+      const updatedKey = isMeta ? { ...key, meta: true } : key;
+
+      handleKey(
+        updatedKey,
+        input,
+        textInput.buffer,
+        actions,
+        textInput.cursor,
+        lastRawInput.current,
+        terminalWidth,
+      );
+    },
+    { isActive },
+  );
 
   const isEmpty = textInput.value === '';
   const showPlaceholder = isEmpty && placeholder && !showCursor;
