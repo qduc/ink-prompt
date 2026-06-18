@@ -97,12 +97,6 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
 
   const isSyncingFromProps = useRef(false);
 
-  useEffect(() => {
-    if (cursorOverride !== undefined) {
-      textInput.setCursorOffset(cursorOverride);
-    }
-  }, [cursorOverride]);
-
   const onCursorChangeRef = useRef(onCursorChange);
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
@@ -120,6 +114,12 @@ export const MultilineInputCore: React.FC<MultilineInputCoreProps> = ({
       textInput.setText(value);
     }
   }, [value]);
+
+  useEffect(() => {
+    if (cursorOverride !== undefined) {
+      textInput.setCursorOffset(cursorOverride);
+    }
+  }, [cursorOverride]);
 
   const onChangeRef = useRef(onChange);
   useEffect(() => {
@@ -283,12 +283,6 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
     onPasteError,
   });
 
-  useEffect(() => {
-    if (cursorOverride !== undefined) {
-      textInput.setCursorOffset(cursorOverride);
-    }
-  }, [cursorOverride]);
-
   const onCursorChangeRef = useRef(onCursorChange);
   useEffect(() => {
     onCursorChangeRef.current = onCursorChange;
@@ -306,6 +300,12 @@ export const MultilineInput: React.FC<MultilineInputProps> = ({
       textInput.setText(value);
     }
   }, [value]);
+
+  useEffect(() => {
+    if (cursorOverride !== undefined) {
+      textInput.setCursorOffset(cursorOverride);
+    }
+  }, [cursorOverride]);
 
   const onChangeRef = useRef(onChange);
   useEffect(() => {
