@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [ 18, 20, 22 ]
+        node-version: [ 20, 22, 24 ]
         ink-version: [ '4.4.1', '5.2.1', '6.5.1', '7.0.0' ]
         react-version: [ '18.2.0', '18.3.1', '19.2.1' ]
         exclude:
@@ -29,17 +29,14 @@ jobs:
             react-version: '19.2.1'
           - ink-version: '5.2.1'
             react-version: '19.2.1'
-          # Ink 6/7, React 19 doesn't work with Node 18
-          - node-version: '18'
+          # Ink 6/7, React 19 compatibility constraints
+          - node-version: '20'
             ink-version: '6.5.1'
             react-version: '19.2.1'
-          - node-version: '18'
-            ink-version: '7.0.0'
-            react-version: '19.2.1'
-          # Ink 7 requires Node 22+ (so exclude Node 20 as well)
           - node-version: '20'
             ink-version: '7.0.0'
             react-version: '19.2.1'
+          # Ink 7 requires Node 22+ (so exclude Node 22 when pairing with older React if needed)
 
     name: Node ${{ matrix.node-version }} / Ink ${{ matrix.ink-version }} / React ${{ matrix.react-version }}
 
