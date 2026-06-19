@@ -3,7 +3,21 @@ import { type UseTextInputResult } from './useTextInput.js';
 import { getVisualRows } from './TextBuffer.js';
 import { log } from '../../utils/logger.js';
 
-export interface KeyHandlerActions extends Omit<UseTextInputResult, 'value' | 'cursor' | 'cursorOffset' | 'setCursorOffset' | 'buffer' | 'blockState' | 'insertImage' | 'images' | 'getImages' | 'setImages'> {
+export interface KeyHandlerActions
+  extends Omit<
+    UseTextInputResult,
+    | 'value'
+    | 'cursor'
+    | 'cursorOffset'
+    | 'setCursorOffset'
+    | 'buffer'
+    | 'blockState'
+    | 'insertImage'
+    | 'images'
+    | 'getImages'
+    | 'setImages'
+    | 'syncExternalState'
+  > {
   submit: () => void;
   onBoundaryArrow?: (direction: 'up' | 'down' | 'left' | 'right') => void;
   paste?: () => void;

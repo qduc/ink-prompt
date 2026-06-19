@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { MultilineInputCore } from '../index.js';
 
 /**
@@ -82,6 +82,32 @@ describe('MultilineInputCore', () => {
   });
 
   describe('Controlled component behavior', () => {
+    it('applies simultaneous value and cursorOverride updates against the new value', async () => {
+      const onCursorChange = vi.fn();
+
+      const { rerender } = render(
+        <MultilineInputCore
+          value="x"
+          cursorOverride={1}
+          onCursorChange={onCursorChange}
+        />
+      );
+
+      onCursorChange.mockClear();
+
+      rerender(
+        <MultilineInputCore
+          value="abcde"
+          cursorOverride={4}
+          onCursorChange={onCursorChange}
+        />
+      );
+
+      await waitFor(() => {
+        expect(onCursorChange).toHaveBeenLastCalledWith(4);
+      });
+    });
+
     it('does NOT call onChange when value prop is updated by parent', () => {
       // This tests the controlled component pattern:
       // onChange should only fire for user-initiated changes, not prop updates

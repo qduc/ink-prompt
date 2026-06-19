@@ -112,6 +112,7 @@ Test environment uses `happy-dom` for DOM simulation and Vitest globals are enab
 - Each history entry stores a full snapshot of the buffer, cursor, and block state
 - Redo stack is cleared whenever a new edit occurs
 - Consecutive single-character inserts are batched into one undo step via `undoDebounceMs` (default: 200ms); set `undoDebounceMs: 0` to disable batching
+- External `value` and `cursorOverride` prop sync uses `useTextInput.syncExternalState()` so replacement buffer, block state, and cursor are computed atomically; cursor offsets are mapped against the new value, and prop sync is not recorded as undo history
 
 **Clipboard Reader Abstraction:**
 - `src/components/MultilineInput/clipboard/` — platform-specific clipboard readers

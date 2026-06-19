@@ -46,6 +46,7 @@ export interface UseTextInputResult {
   undo: () => void;
   redo: () => void;
   setText: (text: string) => void;
+  syncExternalState: (state: { value?: string; cursorOffset?: number }) => void;
   cursorOffset: number;
   setCursorOffset: (offset: number) => void;
   blockState: BlockState;
@@ -62,6 +63,14 @@ interface HistoryState {
 }
 
 const defaultFormatPlaceholder = (displayNumber: number) => `[Paste text #${displayNumber}]`;
+
+function getEndCursor(text: string): Cursor {
+  const lines = text.split('\n');
+  return {
+    line: lines.length - 1,
+    column: lines[lines.length - 1].length,
+  };
+}
 
 export function useTextInput({
   initialValue = '',
@@ -306,8 +315,7 @@ export function useTextInput({
       applyEdit(() => {
         setBlockState(createBlockState());
         const newBuffer = createBuffer(text);
-        const lines = text.split('\n');
-        const newCursor = { line: lines.length - 1, column: lines[lines.length - 1].length };
+        const newCursor = getEndCursor(text);
 
         return { buffer: newBuffer, cursor: newCursor };
       });
@@ -334,6 +342,34 @@ export function useTextInput({
   const cursorOffset = useMemo(
     () => getValueCursorOffset(buffer.lines, cursor, blockState.entries),
     [buffer.lines, cursor, blockState.entries]
+  );
+
+  const syncExternalState = useCallback(
+    ({ value: externalValue, cursorOffset: externalCursorOffset }: { value?: string; cursorOffset?: number }) => {
+      const shouldSyncValue = externalValue !== undefined && externalValue !== value;
+      const shouldSyncCursor =
+        externalCursorOffset !== undefined && externalCursorOffset !== cursorOffset;
+
+      if (!shouldSyncValue && !shouldSyncCursor) return;
+
+      flushPendingInsertBatch();
+
+      const nextBlockState = shouldSyncValue ? createBlockState() : blockState;
+      const nextBuffer = shouldSyncValue ? createBuffer(externalValue) : buffer;
+      const nextCursor =
+        externalCursorOffset !== undefined
+          ? getCursorFromValueOffset(nextBuffer.lines, externalCursorOffset, nextBlockState.entries)
+          : shouldSyncValue
+            ? getEndCursor(externalValue)
+            : cursor;
+
+      if (shouldSyncValue) {
+        setBlockState(nextBlockState);
+        setBuffer(nextBuffer);
+      }
+      setCursor(nextCursor);
+    },
+    [blockState, buffer, cursor, cursorOffset, flushPendingInsertBatch, value]
   );
 
   const imagesList = useMemo(() => {
@@ -393,6 +429,7 @@ export function useTextInput({
     undo,
     redo,
     setText,
+    syncExternalState,
     cursorOffset,
     setCursorOffset: useCallback(
       (offset: number) => {
