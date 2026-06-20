@@ -64,7 +64,7 @@ render(<App />);
 - **Shift+Enter**, `Ctrl+J`, or typing `\` before **Enter** to add a newline (Shift+Enter requires a terminal that distinguishes it — most emit `ESC + CR` or the kitty `CSI 13;2u` sequence)
 - `Ctrl+Z` / `Ctrl+Y` for undo/redo
 - `Ctrl+A` / `Ctrl+E` for jump to line start/end
-- **Home** / **End** keys for line start/end
+- **Home** / **End** keys for line start/end; Home jumps to the start of the whole content when the cursor is already at the start of a later line, and End jumps to the end of the whole content when the cursor is already at the end of an earlier line
 - `Ctrl+V` to paste text or images (when `enableImagePaste` is enabled)
 - **Enter** submits the current buffer
 - **Delete** for forward delete

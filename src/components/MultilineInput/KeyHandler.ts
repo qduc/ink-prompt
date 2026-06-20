@@ -172,6 +172,23 @@ function isShiftEnterSequence(seq?: string): boolean {
   return !!seq && SHIFT_ENTER_SEQUENCES.includes(seq);
 }
 
+function getHomeTarget(cursor?: Cursor): Direction {
+  if (cursor && cursor.column === 0 && cursor.line > 0) {
+    return 'bufferStart';
+  }
+  return 'lineStart';
+}
+
+function getEndTarget(buffer: Buffer, cursor?: Cursor): Direction {
+  if (cursor) {
+    const currentLine = buffer.lines[cursor.line];
+    if (cursor.line < buffer.lines.length - 1 && cursor.column === currentLine.length) {
+      return 'bufferEnd';
+    }
+  }
+  return 'lineEnd';
+}
+
 /**
  * Handles keyboard input and maps it to text input actions.
  *
@@ -230,12 +247,12 @@ export function handleKey(
   // Ink doesn't expose key.home/key.end, so we check:
   // 1. Raw escape sequences if available
   // 2. Ctrl+A (home) and Ctrl+E (end) - common terminal shortcuts
-  if (rawInput && HOME_SEQUENCES.includes(rawInput)) {
-    actions.moveCursor('lineStart');
+  if (key.home || (rawInput && HOME_SEQUENCES.includes(rawInput))) {
+    actions.moveCursor(getHomeTarget(cursor));
     return;
   }
-  if (rawInput && END_SEQUENCES.includes(rawInput)) {
-    actions.moveCursor('lineEnd');
+  if (key.end || (rawInput && END_SEQUENCES.includes(rawInput))) {
+    actions.moveCursor(getEndTarget(buffer, cursor));
     return;
   }
   // Ctrl+A for line start (common in bash/readline)

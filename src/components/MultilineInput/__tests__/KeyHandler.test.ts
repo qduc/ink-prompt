@@ -49,6 +49,15 @@ describe('KeyHandler', () => {
       expect(actions.moveCursor).toHaveBeenCalledWith('lineStart');
     });
 
+    it('moves to the start of the whole content when Home is pressed at the start of a later line', () => {
+      buffer = { lines: ['first line', 'second line'] };
+      const cursor = { line: 1, column: 0 };
+
+      handleKey({}, '', buffer, actions, cursor, '\x1b[H');
+
+      expect(actions.moveCursor).toHaveBeenCalledWith('bufferStart');
+    });
+
     it('handles Home key via alternative escape sequence', () => {
       handleKey({}, '', buffer, actions, undefined, '\x1bOH');
       expect(actions.moveCursor).toHaveBeenCalledWith('lineStart');
@@ -63,6 +72,15 @@ describe('KeyHandler', () => {
       // End key comes as escape sequence, not key.end
       handleKey({}, '', buffer, actions, undefined, '\x1b[F');
       expect(actions.moveCursor).toHaveBeenCalledWith('lineEnd');
+    });
+
+    it('moves to the end of the whole content when End is pressed at the end of an earlier line', () => {
+      buffer = { lines: ['first line', 'second line'] };
+      const cursor = { line: 0, column: 'first line'.length };
+
+      handleKey({}, '', buffer, actions, cursor, '\x1b[F');
+
+      expect(actions.moveCursor).toHaveBeenCalledWith('bufferEnd');
     });
 
     it('handles End key via alternative escape sequence', () => {
