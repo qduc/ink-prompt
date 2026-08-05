@@ -416,6 +416,20 @@ describe('KeyHandler', () => {
       expect(actions.submit).not.toHaveBeenCalled();
     });
 
+    it('handles xterm modifyOtherKeys Shift+Enter sequence (\\x1b[27;2;13~) as newline', () => {
+      buffer = { lines: ['hello'] };
+      handleKey({}, '', buffer, actions, undefined, '\x1b[27;2;13~');
+      expect(actions.newLine).toHaveBeenCalledTimes(1);
+      expect(actions.submit).not.toHaveBeenCalled();
+    });
+
+    it('handles xterm modifyOtherKeys Shift+Enter sequence passed via input ([27;2;13~) as newline', () => {
+      buffer = { lines: ['hello'] };
+      handleKey({}, '[27;2;13~', buffer, actions);
+      expect(actions.newLine).toHaveBeenCalledTimes(1);
+      expect(actions.submit).not.toHaveBeenCalled();
+    });
+
     it('handles Enter as newline if line ends with backslash (multiple lines)', () => {
         const cursor = { line: 1, column: 7 };
         buffer = { lines: ['first', 'second\\'] };

@@ -164,12 +164,28 @@ function isBackspaceSequence(seq?: string): boolean {
 /**
  * Raw sequences that represent Shift+Enter across terminal emulators.
  * - `\x1b\r` / `\x1b\n`: ESC + CR/LF emitted by terminals like iTerm2 / WezTerm when configured.
- * - `\x1b[13;2u`: kitty keyboard protocol encoding for Shift+Enter.
+ * - `\x1b[13;2u` / `[13;2u`: kitty keyboard protocol encoding for Shift+Enter.
+ * - `\x1b[27;2;13~` / `[27;2;13~`: xterm modifyOtherKeys encoding for Shift+Enter.
  */
-const SHIFT_ENTER_SEQUENCES = ['\x1b\r', '\x1b\n', '\x1b[13;2u'];
+const SHIFT_ENTER_SEQUENCES = [
+  '\x1b\r',
+  '\x1b\n',
+  '\x1b[13;2u',
+  '[13;2u',
+  '\x1b[27;2;13~',
+  '[27;2;13~',
+  '\x1b[27;5;13~',
+  '[27;5;13~',
+  '\x1b[27;6;13~',
+  '[27;6;13~',
+  '\x1b[13;2~',
+  '[13;2~',
+];
 
 function isShiftEnterSequence(seq?: string): boolean {
-  return !!seq && SHIFT_ENTER_SEQUENCES.includes(seq);
+  if (!seq) return false;
+  if (SHIFT_ENTER_SEQUENCES.includes(seq)) return true;
+  return /^\x1b?\[(27;[0-9]+;13~|13;[0-9]+[u~])$/.test(seq);
 }
 
 function getHomeTarget(cursor?: Cursor): Direction {
@@ -316,7 +332,8 @@ export function handleKey(
   if (
     (key.shift && key.return) ||
     (key.meta && key.return) ||
-    isShiftEnterSequence(rawInput)
+    isShiftEnterSequence(rawInput) ||
+    isShiftEnterSequence(input)
   ) {
     actions.newLine();
     return;

@@ -112,4 +112,25 @@ describe('MultilineInput Meta Key handling', () => {
     // It should be treated as a normal character insertion
     expect(onChange).toHaveBeenLastCalledWith('/');
   });
+
+  it('correctly inserts a newline when Shift+Enter xterm escape sequence [27;2;13~ is received', () => {
+    const onChange = vi.fn();
+    
+    render(
+      <MultilineInput 
+        value="first" 
+        onChange={onChange} 
+        isActive={true} 
+      />
+    );
+
+    expect(capturedUseInputHandler).not.toBeNull();
+
+    act(() => {
+      mockStdin.emit('data', Buffer.from('\x1b[27;2;13~'));
+      capturedUseInputHandler!('[27;2;13~', {});
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith('first\n');
+  });
 });
