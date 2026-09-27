@@ -30,10 +30,10 @@ export interface MultilineInputProps {
   pasteThreshold?: number;
   /**
    * Custom formatter for the placeholder display text.
-   * Receives the display number (1-based) and should return the display string.
+   * Receives the display number (1-based) and original pasted text, and should return the display string.
    * Default: (n) => `[Paste text #${n}]`
    */
-  formatPastePlaceholder?: (displayNumber: number) => string;
+  formatPastePlaceholder?: (displayNumber: number, pastedText: string) => string;
   images?: ImageRef[];
   onImagesChange?: (images: ImageRef[]) => void;
   onPasteError?: (reason: PasteErrorReason) => void;
@@ -64,10 +64,10 @@ export interface MultilineInputCoreProps {
   pasteThreshold?: number;
   /**
    * Custom formatter for the placeholder display text.
-   * Receives the display number (1-based) and should return the display string.
+   * Receives the display number (1-based) and original pasted text, and should return the display string.
    * Default: (n) => `[Paste text #${n}]`
    */
-  formatPastePlaceholder?: (displayNumber: number) => string;
+  formatPastePlaceholder?: (displayNumber: number, pastedText: string) => string;
   images?: ImageRef[];
   onImagesChange?: (images: ImageRef[]) => void;
   maxHeight?: number;

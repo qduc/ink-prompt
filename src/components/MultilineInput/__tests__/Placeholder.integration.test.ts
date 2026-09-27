@@ -300,6 +300,30 @@ describe('Placeholder integration with useTextInput', () => {
     }
   });
 
+  it('passes each exact pasted string to the formatter', () => {
+    const formatter = vi.fn((displayNumber: number, pastedText: string) =>
+      `[${displayNumber}:${pastedText}]`,
+    );
+    const { result } = renderHook(() => useTextInput({
+      pasteThreshold: 2,
+      formatPastePlaceholder: formatter,
+      undoDebounceMs: 0,
+    }));
+    const pastes = ['first 😀\nsecond', '二つ目\n終わり'];
+
+    act(() => {
+      result.current.insert(pastes[0]);
+      result.current.insert(pastes[1]);
+    });
+
+    expect(formatter.mock.calls).toEqual([[1, pastes[0]], [2, pastes[1]]]);
+    expect(result.current.value).toBe(pastes.join(''));
+    expect([...result.current.blockState.entries.values()]
+      .filter(entry => entry.kind === 'paste')
+      .map(entry => entry.displayText))
+      .toEqual([`[1:${pastes[0]}]`, `[2:${pastes[1]}]`]);
+  });
+
   it('placeholder counter is per useTextInput instance', () => {
     const { result: r1 } = renderHook(() => useTextInput({
       pasteThreshold: 10,

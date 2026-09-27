@@ -30,7 +30,7 @@ export interface UseTextInputProps {
   historyLimit?: number;
   undoDebounceMs?: number;
   pasteThreshold?: number;
-  formatPastePlaceholder?: (displayNumber: number) => string;
+  formatPastePlaceholder?: (displayNumber: number, pastedText: string) => string;
 }
 
 export interface UseTextInputResult {
@@ -191,7 +191,7 @@ export function useTextInput({
         flushPendingInsertBatch();
         pushToHistory(buffer, cursor);
 
-        const displayText = formatPastePlaceholder(blockState.nextPasteNumber);
+        const displayText = formatPastePlaceholder(blockState.nextPasteNumber, normalized);
         const { marker, state: newBlockState } = createPasteBlockEntry(
           blockState,
           normalized,
