@@ -311,10 +311,8 @@ describe('Placeholder integration with useTextInput', () => {
     }));
     const pastes = ['first 😀\nsecond', '二つ目\n終わり'];
 
-    act(() => {
-      result.current.insert(pastes[0]);
-      result.current.insert(pastes[1]);
-    });
+    act(() => { result.current.insert(pastes[0]); });
+    act(() => { result.current.insert(pastes[1]); });
 
     expect(formatter.mock.calls).toEqual([[1, pastes[0]], [2, pastes[1]]]);
     expect(result.current.value).toBe(pastes.join(''));
